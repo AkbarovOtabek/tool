@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>pentkit — прокси</title>
+<style>
+:root{--bg:#0b1220;--card:#131c2e;--card2:#0f1726;--fg:#e6edf6;--mut:#8aa0bd;--line:#223049;--accent:#3b82f6;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 system-ui,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:1200px;margin:0 auto;padding:18px 16px 60px}
+h1{font-size:19px;margin:0 0 2px;display:flex;align-items:center;gap:10px}
+a{color:var(--accent)}
+.sub{color:var(--mut);font-size:13px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:14px}
+.card h2{font-size:13px;margin:0 0 10px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut)}
+label{display:block;font-size:12px;color:var(--mut);margin:8px 0 3px}
+input[type=text],textarea,select{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px 10px;font:13px/1.4 inherit}
+textarea{resize:vertical;font-family:ui-monospace,monospace;font-size:12px}
+button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;cursor:pointer}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--fg)}
+button.bad{background:var(--bad)}
+button.ok{background:var(--ok)}
+button:disabled{opacity:.5;cursor:not-allowed}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pill{font-size:11px;padding:2px 8px;border-radius:999px;background:#1f2b43;color:var(--mut)}
+.pill.on{background:#0f3d24;color:#6ee7a0}.pill.off{background:#3d1f1f;color:#f3a6a6}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{text-align:left;padding:5px 7px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mut);font-size:10px;text-transform:uppercase}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:#17223a}
+td.m{font-family:ui-monospace,monospace;color:#9fb3d1;word-break:break-all}
+.st2{color:#6ee7a0}.st3{color:#f5d58a}.st4{color:#f3a6a6}.st5{color:#f3a6a6}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:820px){.grid2{grid-template-columns:1fr}}
+.pane{background:#060b14;border:1px solid var(--line);border-radius:8px;padding:10px;height:300px;overflow:auto;font:11px/1.5 ui-monospace,monospace;color:#b9c7dc;white-space:pre-wrap;word-break:break-all}
+.oos{opacity:.5}
+.note{color:var(--mut);font-size:11px}
+code{background:#0f1726;padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔀 pentkit — прокси <span id="pill" class="pill off">остановлен</span></h1>
+  <div class="sub">Перехват HTTP/HTTPS (MITM), история, Intercept и Repeater — как Burp, но в одном бинарнике. <a href="/?t=__TOKEN__">← к сканеру</a></div>
+
+  <div class="warn" style="background:#3a2a08;border:1px solid #6b4e12;color:#f5d58a;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:14px">
+    ⚠️ Прокси расшифровывает твой HTTPS-трафик (MITM). Используй только на своей машине и только для авторизованного теста. Снимай прокси и удаляй CA из браузера после работы.
+  </div>
+
+  <div class="card">
+    <h2>Управление</h2>
+    <div class="row">
+      <label style="margin:0">Адрес</label>
+      <input type="text" id="addr" value="127.0.0.1:8780" style="width:180px">
+      <label style="margin:0">Домены scope (опц., через запятую)</label>
+      <input type="text" id="domains" placeholder="acme.com, acme-corp.net" style="flex:1;min-width:160px">
+      <label style="margin:0" title="Исходящие соединения прокси пойдут через Tor (SOCKS5 9050)"><input type="checkbox" id="tor"> 🔒 через Tor</label>
+      <button id="start">▶ Запустить</button>
+      <button id="stop" class="ghost" disabled>■ Остановить</button>
+      <button id="intercept" class="ghost" disabled>⏸ Intercept: выкл</button>
+      <a id="ca" class="pill" href="#" style="display:none">⬇ Скачать CA (.crt)</a>
+      <span id="cnt" class="pill">0 записей</span>
+    </div>
+    <div class="note" style="margin-top:8px">
+      Настройка: в браузере укажи HTTP/HTTPS-прокси <code id="pxaddr">127.0.0.1:8780</code>, затем импортируй <b>pentkit CA</b> как доверенный корневой сертификат (Firefox: Настройки → Сертификаты; Chrome/ОС: в хранилище «Доверенные корневые»). Без импорта CA браузер будет ругаться на HTTPS.
+    </div>
+  </div>
+
+  <div class="card" id="interceptCard" style="display:none">
+    <h2>Перехвачен запрос (Intercept)</h2>
+    <div id="pendingBox"><div class="note">очередь пуста — запросы проходят насквозь, пока Intercept включён и ничего не удержано</div></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>История запросов (<span id="hcount">0</span>)</h2>
+      <div style="max-height:360px;overflow:auto">
+        <table><thead><tr><th>#</th><th>M</th><th>код</th><th>хост</th><th>путь</th><th>b</th></tr></thead>
+        <tbody id="htbody"><tr><td colspan="6" class="note">пусто</td></tr></tbody></table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Repeater</h2>
+      <div class="row">
+        <select id="rscheme" style="width:90px"><option>https</option><option>http</option></select>
+        <input type="text" id="rhost" placeholder="acme.com" style="flex:1">
+        <button id="send" class="ok">▶ Отправить</button>
+      </div>
+      <label>Сырой запрос</label>
+      <textarea id="rraw" style="height:150px" placeholder="GET / HTTP/1.1&#10;Host: acme.com&#10;User-Agent: pentkit&#10;"></textarea>
+      <div class="note" id="rstatus"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Просмотр / Repeater-источник</h2>
+    <div class="row" style="margin-bottom:8px"><button id="toRep" class="ghost" disabled>→ В Repeater</button><span class="note" id="viewinfo">выбери запись из истории</span></div>
+    <div class="grid2">
+      <div><label>Запрос</label><div class="pane" id="reqpane"></div></div>
+      <div><label>Ответ</label><div class="pane" id="resppane"></div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const TOKEN="__TOKEN__";
+const H={"X-Token":TOKEN,"Content-Type":"application/json"};
+let running=false, interceptOn=false, poll=null, cur=null;
+const el=id=>document.getElementById(id);
+
+async function api(path,opts){opts=opts||{};opts.headers=H;const r=await fetch(path,opts);if(!r.ok)throw new Error(await r.text());return r.json()}
+
+async function start(){
+  const body=JSON.stringify({addr:el("addr").value,domains:el("domains").value.replace(/,/g,"\n"),tor:el("tor").checked});
+  try{const s=await api("/api/proxy/start",{method:"POST",body});setRunning(true,s.addr)}catch(e){alert("Ошибка: "+e.message)}
+}
+async function stop(){await api("/api/proxy/stop",{method:"POST"});setRunning(false)}
+function setRunning(on,addr){
+  running=on;
+  el("pill").textContent=on?"работает "+(addr||""):"остановлен";
+  el("pill").className="pill "+(on?"on":"off");
+  el("start").disabled=on;el("stop").disabled=!on;el("intercept").disabled=!on;
+  el("ca").style.display=on?"inline-block":"none";
+  el("ca").href="/api/proxy/ca?t="+TOKEN;
+  if(addr){el("pxaddr").textContent=addr}
+  if(on){if(poll)clearInterval(poll);poll=setInterval(tick,1800);tick()}
+  else{if(poll)clearInterval(poll);poll=null;el("interceptCard").style.display="none"}
+}
+async function toggleIntercept(){
+  interceptOn=!interceptOn;
+  await api("/api/proxy/intercept",{method:"POST",body:JSON.stringify({on:interceptOn})});
+  el("intercept").textContent="⏸ Intercept: "+(interceptOn?"ВКЛ":"выкл");
+  el("intercept").className=interceptOn?"":"ghost";
+  el("interceptCard").style.display=interceptOn?"block":"none";
+}
+
+async function tick(){
+  let s;try{s=await api("/api/proxy/status")}catch(e){return}
+  if(!s.running){setRunning(false);return}
+  el("cnt").textContent=s.count+" записей";
+  loadHistory();
+  if(s.intercept)loadPending();
+}
+
+async function loadPending(){
+  let p;try{p=await api("/api/proxy/pending")}catch(e){return}
+  p=p||[];
+  if(p.length===0){el("pendingBox").innerHTML='<div class="note">очередь пуста — запросы проходят насквозь, пока ничего не удержано</div>';return}
+  el("pendingBox").innerHTML=p.map(x=>`
+    <div style="margin-bottom:10px;border:1px solid var(--line);border-radius:8px;padding:8px">
+      <div class="note">#${x.id} · ${x.scheme}://${esc(x.host)}</div>
+      <textarea id="pend${x.id}" style="height:130px">${esc(x.raw)}</textarea>
+      <div class="row" style="margin-top:6px">
+        <button onclick="resolve(${x.id},false)" class="ok">Forward ▶</button>
+        <button onclick="resolve(${x.id},true)" class="bad">Drop ✕</button>
+      </div>
+    </div>`).join("");
+}
+async function resolve(id,drop){
+  const raw=drop?"":el("pend"+id).value;
+  await api("/api/proxy/resolve",{method:"POST",body:JSON.stringify({id,drop,raw})});
+  loadPending();
+}
+
+async function loadHistory(){
+  let h;try{h=await api("/api/proxy/history")}catch(e){return}
+  h=h||[];el("hcount").textContent=h.length;
+  el("htbody").innerHTML=h.slice(0,200).map(x=>{
+    const sc=x.status>=500?"st5":x.status>=400?"st4":x.status>=300?"st3":"st2";
+    return `<tr class="${x.in_scope?'':'oos'}" onclick="openEntry(${x.id})">
+      <td>${x.id}</td><td>${esc(x.method)}</td><td class="${sc}">${x.status||'—'}</td>
+      <td class="m">${esc(x.host)}</td><td class="m">${esc(x.url)}</td><td>${x.length||0}</td></tr>`;
+  }).join("")||'<tr><td colspan="6" class="note">пусто</td></tr>';
+}
+
+async function openEntry(id){
+  let e;try{e=await api("/api/proxy/entry?id="+id)}catch(err){return}
+  cur=e;
+  el("reqpane").textContent=e.req_raw||"";
+  el("resppane").textContent=e.resp_raw||"(нет ответа)";
+  el("viewinfo").textContent=`#${e.id} ${e.method} ${e.scheme}://${e.host}${e.url} → ${e.status}`;
+  el("toRep").disabled=false;
+}
+function toRepeater(){
+  if(!cur)return;
+  el("rscheme").value=cur.scheme;el("rhost").value=cur.host;el("rraw").value=cur.req_raw||"";
+  window.scrollTo(0,0);
+}
+async function send(){
+  const body=JSON.stringify({scheme:el("rscheme").value,host:el("rhost").value,raw:el("rraw").value});
+  el("rstatus").textContent="отправляю...";
+  try{const r=await api("/api/proxy/repeat",{method:"POST",body});
+    if(r.err){el("rstatus").textContent="ошибка: "+r.err;return}
+    el("rstatus").textContent="ответ "+r.status+" · "+r.length+" байт";
+    el("resppane").textContent=r.resp_raw;el("viewinfo").textContent="Repeater → "+r.status;
+  }catch(e){el("rstatus").textContent="ошибка: "+e.message}
+}
+function esc(s){return(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}
+
+el("start").onclick=start;el("stop").onclick=stop;el("intercept").onclick=toggleIntercept;
+el("send").onclick=send;el("toRep").onclick=toRepeater;
+(async()=>{try{const s=await api("/api/proxy/status");if(s.running){setRunning(true,s.addr);interceptOn=s.intercept;if(interceptOn){el("intercept").textContent="⏸ Intercept: ВКЛ";el("intercept").className="";el("interceptCard").style.display="block"}}}catch(e){}})();
+</script>
+</body>
+</html>

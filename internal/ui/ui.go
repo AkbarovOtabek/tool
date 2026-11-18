@@ -1,0 +1,571 @@
+// Package ui — встроенный веб-интерфейс pentkit. Один бинарник отдаёт страницу
+// и API: настройка scope/авторизации, запуск сканирования, живой лог, находки,
+// отчёт. Сервер слушает только localhost; API защищён разовым токеном.
+package ui
+
+import (
+	"context"
+	"crypto/rand"
+	_ "embed"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"pentkit/internal/config"
+	"pentkit/internal/engine"
+	"pentkit/internal/event"
+	"pentkit/internal/netx"
+	"pentkit/internal/proxy"
+	"pentkit/internal/runner"
+	"pentkit/internal/scope"
+	"pentkit/internal/store"
+)
+
+//go:embed index.html
+var indexHTML string
+
+//go:embed proxy.html
+var proxyHTML string
+
+// Server — состояние веб-интерфейса (одна работа за раз).
+type Server struct {
+	token string
+	mu    sync.Mutex
+	job   *job
+
+	pmu sync.Mutex
+	prx *proxy.Proxy
+}
+
+type job struct {
+	sink       *event.Buffered
+	st         *store.Store
+	cfg        *config.Config
+	reportPath string
+	cancel     context.CancelFunc
+	done       bool
+	err        string
+}
+
+// scanRequest — тело POST /api/scan.
+type scanRequest struct {
+	Name          string `json:"name"`
+	Client        string `json:"client"`
+	Authorization string `json:"authorization"`
+	Domains       string `json:"domains"` // по одному в строке
+	CIDRs         string `json:"cidrs"`
+	OutOfScope    string `json:"out_of_scope"`
+	Concurrency   int    `json:"concurrency"`
+	Tor           bool   `json:"tor"`
+	Proxy         string `json:"proxy"`
+	Stealth       bool   `json:"stealth"`
+	Passive       bool   `json:"passive"`
+	Options       struct {
+		Cloudflare  bool `json:"cloudflare"`
+		Crawl       bool `json:"crawl"`
+		Fingerprint bool `json:"fingerprint"`
+		OSINT       bool `json:"osint"`
+		Vuln        bool `json:"vuln"`
+		Secrets     bool `json:"secrets"`
+		Web         bool `json:"web"`
+		SQLi        bool `json:"sqli"`
+		WordPress   bool `json:"wordpress"`
+		TLS         bool `json:"tls"`
+		Nikto       bool `json:"nikto"`
+		Takeover    bool `json:"takeover"`
+		Screenshots bool `json:"screenshots"`
+		Nmap        bool `json:"nmap"`
+		Exploit     bool `json:"exploit"`
+		MsfCheck    bool `json:"msfcheck"`
+		Verify      bool `json:"verify"`
+	} `json:"options"`
+}
+
+// Serve запускает веб-интерфейс на addr (например, 127.0.0.1:8777).
+func Serve(addr string) error {
+	tok := make([]byte, 16)
+	rand.Read(tok)
+	s := &Server{token: hex.EncodeToString(tok)}
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", s.handleIndex)
+	mux.HandleFunc("/api/tools", s.auth(s.handleTools))
+	mux.HandleFunc("/api/scan", s.auth(s.handleScan))
+	mux.HandleFunc("/api/status", s.auth(s.handleStatus))
+	mux.HandleFunc("/api/findings", s.auth(s.handleFindings))
+	mux.HandleFunc("/api/stop", s.auth(s.handleStop))
+	mux.HandleFunc("/api/report", s.auth(s.handleReport))
+
+	// Прокси (Burp-режим): перехват, история, Intercept, Repeater.
+	mux.HandleFunc("/proxy", s.handleProxyPage)
+	mux.HandleFunc("/api/proxy/start", s.auth(s.handleProxyStart))
+	mux.HandleFunc("/api/proxy/stop", s.auth(s.handleProxyStop))
+	mux.HandleFunc("/api/proxy/status", s.auth(s.handleProxyStatus))
+	mux.HandleFunc("/api/proxy/ca", s.auth(s.handleProxyCA))
+	mux.HandleFunc("/api/proxy/intercept", s.auth(s.handleProxyIntercept))
+	mux.HandleFunc("/api/proxy/pending", s.auth(s.handleProxyPending))
+	mux.HandleFunc("/api/proxy/resolve", s.auth(s.handleProxyResolve))
+	mux.HandleFunc("/api/proxy/history", s.auth(s.handleProxyHistory))
+	mux.HandleFunc("/api/proxy/entry", s.auth(s.handleProxyEntry))
+	mux.HandleFunc("/api/proxy/repeat", s.auth(s.handleProxyRepeat))
+
+	url := "http://" + addr + "/?t=" + s.token
+	fmt.Println("=== pentkit web ===")
+	fmt.Println("Интерфейс:", url)
+	fmt.Println("Открой эту ссылку в браузере (токен в ссылке обязателен).")
+	fmt.Println("Только для авторизованного тестирования.")
+
+	srv := &http.Server{Addr: addr, Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	return srv.ListenAndServe()
+}
+
+// auth проверяет токен (из заголовка X-Token или query ?t=).
+func (s *Server) auth(h http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		tok := r.Header.Get("X-Token")
+		if tok == "" {
+			tok = r.URL.Query().Get("t")
+		}
+		if tok != s.token {
+			http.Error(w, "неверный токен", http.StatusUnauthorized)
+			return
+		}
+		h(w, r)
+	}
+}
+
+func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+	page := strings.ReplaceAll(indexHTML, "__TOKEN__", s.token)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, page)
+}
+
+func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
+	rn := runner.New(time.Minute, false)
+	tools := []string{"subfinder", "dnsx", "naabu", "httpx", "nuclei", "ffuf",
+		"arjun", "dalfox", "katana", "gau", "testssl", "nikto", "gowitness",
+		"nmap", "searchsploit", "msfconsole", "amass", "assetfinder", "whatweb",
+		"wafw00f", "wpscan", "sqlmap", "theHarvester",
+		// скрытность и новые white-hat тулы
+		"proxychains4", "findomain", "waybackurls", "gf", "feroxbuster",
+		"subzy", "SecretFinder"}
+	res := map[string]bool{}
+	for _, t := range tools {
+		res[t] = rn.Has(t)
+	}
+	writeJSON(w, res)
+}
+
+func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	if s.job != nil && !s.job.done {
+		s.mu.Unlock()
+		http.Error(w, "сканирование уже идёт", http.StatusConflict)
+		return
+	}
+	s.mu.Unlock()
+
+	var req scanRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "неверный запрос: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	cfg, sc, err := buildConfig(req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	engDir := filepath.Join(cfg.OutputDir, cfg.Engagement.Name)
+	st, err := store.Open(engDir)
+	if err != nil {
+		http.Error(w, "хранилище: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	sink := event.NewBuffered()
+	ctx, cancel := context.WithCancel(context.Background())
+	j := &job{sink: sink, st: st, cfg: cfg, cancel: cancel}
+	s.mu.Lock()
+	s.job = j
+	s.mu.Unlock()
+
+	opts := engine.Options{
+		Cloudflare: req.Options.Cloudflare, Crawl: req.Options.Crawl,
+		Fingerprint: req.Options.Fingerprint, OSINT: req.Options.OSINT,
+		Vuln: req.Options.Vuln, Secrets: req.Options.Secrets,
+		Web: req.Options.Web, SQLi: req.Options.SQLi,
+		WordPress: req.Options.WordPress, TLS: req.Options.TLS,
+		Nikto: req.Options.Nikto, Takeover: req.Options.Takeover,
+		Screenshots: req.Options.Screenshots, Nmap: req.Options.Nmap,
+		Exploit: req.Options.Exploit, MsfCheck: req.Options.MsfCheck,
+		Verify: req.Options.Verify,
+	}
+	if req.Passive {
+		// Пассив важнее галочек: оставляем только тихие модули.
+		opts = engine.Options{Cloudflare: true, Fingerprint: true, OSINT: true}
+	}
+
+	go func() {
+		sink.Start()
+		defer func() {
+			if rec := recover(); rec != nil {
+				s.mu.Lock()
+				j.err = fmt.Sprintf("внутренняя ошибка: %v", rec)
+				j.done = true
+				s.mu.Unlock()
+			}
+			sink.Finish()
+			st.Close()
+		}()
+		rn := runner.New(cfg.Timeout.Duration, false)
+		rn.Passive = req.Passive
+		rn.Stealth = cfg.Stealth
+		if addr, on := cfg.SOCKS(); on {
+			if err := netx.Check(addr, 5*time.Second); err != nil {
+				sink.Logf("✖ Tor/прокси недоступен: %v — запусти сервис tor или задай proxy\n", err)
+				s.mu.Lock()
+				j.err = "прокси/Tor недоступен: " + err.Error()
+				j.done = true
+				s.mu.Unlock()
+				return
+			}
+			if !rn.Has("proxychains4") {
+				sink.Logln("✖ включён tor/proxy, но нет proxychains4 (apt install proxychains4) — прерываю, чтобы не светить реальный IP")
+				s.mu.Lock()
+				j.err = "нет proxychains4 для маршрутизации внешних тулов"
+				j.done = true
+				s.mu.Unlock()
+				return
+			}
+			if conf, err := netx.WriteProxychainsConf(engDir, addr); err == nil {
+				rn.UseProxychains(conf, addr)
+				sink.Logf("🔒 трафик через SOCKS5 %s (proxychains4 + Go-SOCKS); raw-скан в connect-режиме\n", addr)
+			}
+		}
+		if cfg.Stealth {
+			sink.Logf("🐢 stealth: rate=%d/s, concurrency=%d, ротация User-Agent\n", cfg.RateLimit, cfg.Concurrency)
+		}
+		if req.Passive {
+			sink.Logln("🛡 пассивный режим: без портскана/nikto/wafw00f/активных инъекций")
+		}
+		path, err := engine.Run(ctx, cfg, sc, rn, st, sink, opts)
+		s.mu.Lock()
+		j.reportPath = path
+		if err != nil {
+			j.err = err.Error()
+		}
+		j.done = true
+		s.mu.Unlock()
+	}()
+
+	writeJSON(w, map[string]any{"ok": true, "engagement": cfg.Engagement.Name})
+}
+
+func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	j := s.job
+	s.mu.Unlock()
+	if j == nil {
+		writeJSON(w, map[string]any{"started": false})
+		return
+	}
+	stage, running, lines := j.sink.Snapshot()
+	counts := j.st.Counts()
+	writeJSON(w, map[string]any{
+		"started": true, "running": running, "stage": stage, "lines": lines,
+		"done": j.done, "error": j.err, "reportReady": j.reportPath != "",
+		"counts": map[string]int{
+			"critical": counts[store.SevCritical], "high": counts[store.SevHigh],
+			"medium": counts[store.SevMedium], "low": counts[store.SevLow],
+			"info": counts[store.SevInfo],
+		},
+	})
+}
+
+func (s *Server) handleFindings(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	j := s.job
+	s.mu.Unlock()
+	if j == nil {
+		writeJSON(w, []any{})
+		return
+	}
+	writeJSON(w, j.st.All())
+}
+
+func (s *Server) handleStop(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	j := s.job
+	s.mu.Unlock()
+	if j != nil && !j.done {
+		j.cancel()
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	j := s.job
+	s.mu.Unlock()
+	if j == nil || j.reportPath == "" {
+		http.Error(w, "отчёт ещё не готов", http.StatusNotFound)
+		return
+	}
+	data, err := os.ReadFile(j.reportPath)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(data)
+}
+
+// --- Прокси (Burp-режим) ---
+
+func (s *Server) handleProxyPage(w http.ResponseWriter, r *http.Request) {
+	// Страница сама берёт токен из ?t= и кладёт в заголовки.
+	tok := r.URL.Query().Get("t")
+	page := strings.ReplaceAll(proxyHTML, "__TOKEN__", tok)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, page)
+}
+
+func (s *Server) handleProxyStart(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Addr    string `json:"addr"`
+		Domains string `json:"domains"`
+		Tor     bool   `json:"tor"`
+		Proxy   string `json:"proxy"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	addr := req.Addr
+	if addr == "" {
+		addr = "127.0.0.1:8780"
+	}
+	upstream := strings.TrimSpace(req.Proxy)
+	if upstream != "" {
+		upstream = netx.Normalize(upstream)
+	} else if req.Tor {
+		upstream = "127.0.0.1:9050"
+	}
+	if upstream != "" {
+		if err := netx.Check(upstream, 5*time.Second); err != nil {
+			http.Error(w, "прокси/Tor недоступен: "+err.Error(), http.StatusBadGateway)
+			return
+		}
+	}
+
+	s.pmu.Lock()
+	defer s.pmu.Unlock()
+	if s.prx != nil {
+		writeJSON(w, map[string]any{"ok": true, "addr": s.prx.Addr(), "already": true})
+		return
+	}
+
+	// Необязательный scope: фильтрация истории по хостам работы.
+	var sc proxy.ScopeChecker
+	if doms := splitLines(req.Domains); len(doms) > 0 {
+		if compiled, err := scope.Compile(config.Scope{Domains: doms}); err == nil {
+			sc = compiled
+		}
+	}
+
+	px, err := proxy.New("pentkit-ca", sc)
+	if err != nil {
+		http.Error(w, "proxy: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	px.SetUpstreamProxy(upstream) // "" = напрямую; иначе весь перехват идёт через Tor/SOCKS
+	if err := px.Start(addr); err != nil {
+		http.Error(w, "proxy listen: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	s.prx = px
+	writeJSON(w, map[string]any{"ok": true, "addr": px.Addr()})
+}
+
+func (s *Server) handleProxyStop(w http.ResponseWriter, r *http.Request) {
+	s.pmu.Lock()
+	defer s.pmu.Unlock()
+	if s.prx != nil {
+		s.prx.Stop()
+		s.prx = nil
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+func (s *Server) handleProxyStatus(w http.ResponseWriter, r *http.Request) {
+	px := s.getProxy()
+	if px == nil {
+		writeJSON(w, map[string]any{"running": false})
+		return
+	}
+	writeJSON(w, map[string]any{"running": true, "addr": px.Addr(),
+		"count": px.Count(), "intercept": px.Intercepting()})
+}
+
+func (s *Server) handleProxyCA(w http.ResponseWriter, r *http.Request) {
+	px := s.getProxy()
+	if px == nil {
+		http.Error(w, "прокси не запущен", http.StatusNotFound)
+		return
+	}
+	w.Header().Set("Content-Type", "application/x-x509-ca-cert")
+	w.Header().Set("Content-Disposition", "attachment; filename=pentkit-ca.crt")
+	w.Write(px.CACertPEM())
+}
+
+func (s *Server) handleProxyIntercept(w http.ResponseWriter, r *http.Request) {
+	px := s.getProxy()
+	if px == nil {
+		http.Error(w, "прокси не запущен", http.StatusNotFound)
+		return
+	}
+	var req struct {
+		On bool `json:"on"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	px.SetIntercept(req.On)
+	writeJSON(w, map[string]any{"ok": true, "intercept": px.Intercepting()})
+}
+
+func (s *Server) handleProxyPending(w http.ResponseWriter, r *http.Request) {
+	px := s.getProxy()
+	if px == nil {
+		writeJSON(w, []any{})
+		return
+	}
+	writeJSON(w, px.PendingList())
+}
+
+func (s *Server) handleProxyResolve(w http.ResponseWriter, r *http.Request) {
+	px := s.getProxy()
+	if px == nil {
+		http.Error(w, "прокси не запущен", http.StatusNotFound)
+		return
+	}
+	var req struct {
+		ID   int    `json:"id"`
+		Drop bool   `json:"drop"`
+		Raw  string `json:"raw"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	ok := px.Resolve(req.ID, req.Drop, req.Raw)
+	writeJSON(w, map[string]any{"ok": ok})
+}
+
+func (s *Server) handleProxyHistory(w http.ResponseWriter, r *http.Request) {
+	px := s.getProxy()
+	if px == nil {
+		writeJSON(w, []any{})
+		return
+	}
+	writeJSON(w, px.History(false))
+}
+
+func (s *Server) handleProxyEntry(w http.ResponseWriter, r *http.Request) {
+	px := s.getProxy()
+	if px == nil {
+		http.Error(w, "прокси не запущен", http.StatusNotFound)
+		return
+	}
+	id, _ := strconv.Atoi(r.URL.Query().Get("id"))
+	e := px.Get(id)
+	if e == nil {
+		http.Error(w, "не найдено", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, e)
+}
+
+func (s *Server) handleProxyRepeat(w http.ResponseWriter, r *http.Request) {
+	px := s.getProxy()
+	if px == nil {
+		http.Error(w, "прокси не запущен", http.StatusNotFound)
+		return
+	}
+	var req struct {
+		Scheme string `json:"scheme"`
+		Host   string `json:"host"`
+		Raw    string `json:"raw"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "неверный запрос", http.StatusBadRequest)
+		return
+	}
+	if req.Scheme == "" {
+		req.Scheme = "https"
+	}
+	writeJSON(w, px.Repeat(req.Scheme, req.Host, req.Raw))
+}
+
+func (s *Server) getProxy() *proxy.Proxy {
+	s.pmu.Lock()
+	defer s.pmu.Unlock()
+	return s.prx
+}
+
+func buildConfig(req scanRequest) (*config.Config, *scope.Scope, error) {
+	cfg := config.Default()
+	cfg.Engagement = config.Engagement{Name: strings.TrimSpace(req.Name),
+		Client: strings.TrimSpace(req.Client), Authorization: strings.TrimSpace(req.Authorization)}
+	cfg.Scope = config.Scope{
+		Domains:    splitLines(req.Domains),
+		CIDRs:      splitLines(req.CIDRs),
+		OutOfScope: splitLines(req.OutOfScope),
+	}
+	if req.Concurrency > 0 {
+		cfg.Concurrency = req.Concurrency
+	}
+	cfg.Tor = req.Tor
+	cfg.Proxy = strings.TrimSpace(req.Proxy)
+	cfg.Stealth = req.Stealth
+	if cfg.Stealth {
+		if cfg.RateLimit == 0 {
+			cfg.RateLimit = 10
+		}
+		if cfg.Concurrency > 3 {
+			cfg.Concurrency = 3
+		}
+	}
+	if cfg.Engagement.Name == "" {
+		return nil, nil, fmt.Errorf("укажи идентификатор работы (name)")
+	}
+	if cfg.Engagement.Authorization == "" {
+		return nil, nil, fmt.Errorf("укажи авторизацию (разрешение на тест) — обязательно")
+	}
+	if len(cfg.Scope.Domains) == 0 && len(cfg.Scope.CIDRs) == 0 {
+		return nil, nil, fmt.Errorf("scope пуст: укажи хотя бы один домен или CIDR")
+	}
+	sc, err := scope.Compile(cfg.Scope)
+	if err != nil {
+		return nil, nil, fmt.Errorf("scope: %w", err)
+	}
+	return cfg, sc, nil
+}
+
+func splitLines(s string) []string {
+	var out []string
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		line = strings.TrimPrefix(line, "http://")
+		line = strings.TrimPrefix(line, "https://")
+		if line != "" {
+			out = append(out, line)
+		}
+	}
+	return out
+}
+
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	json.NewEncoder(w).Encode(v)
+}

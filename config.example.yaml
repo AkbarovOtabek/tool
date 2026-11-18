@@ -1,0 +1,32 @@
+# pentkit — пример конфига. Скопируй в config.yaml и заполни под конкретную работу.
+# ВАЖНО: запускай только против систем, на тест которых есть письменное разрешение.
+
+engagement:
+  name: acme-2026-11          # идентификатор работы (станет папкой в engagements/)
+  client: "ACME LLC"          # название организации
+  authorization: "Договор №123 от 2026-11-01 / разрешение на pentest"  # обязательно
+
+scope:
+  domains:                    # корневые домены в скоупе (поддомены включаются автоматически)
+    - acme.com
+    - acme-corp.net
+  cidrs:                      # диапазоны IP в скоупе (опционально)
+    - 203.0.113.0/24
+  out_of_scope:              # явные исключения (приоритет над scope)
+    - vpn.acme.com
+    - 203.0.113.5
+
+concurrency: 10              # сколько целей параллельно
+rate_limit: 0               # глобальный лимит запросов/сек для nuclei (0 = как у тула)
+timeout: 15m                # таймаут одного внешнего тула
+output_dir: engagements     # куда складывать результаты
+
+keys:                       # ключи для поиска origin за Cloudflare (опционально)
+  shodan: ""
+  securitytrails: ""
+  censys: ""                # формат "id:secret"
+
+wordlists:                  # пути под Kali (seclists)
+  dirs: /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt
+  subs: /usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt
+  params: /usr/share/seclists/Discovery/Web-Content/burp-parameter-names.txt

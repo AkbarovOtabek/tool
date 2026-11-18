@@ -1,0 +1,236 @@
+// Package recon — этап разведки: поддомены -> резолв -> порты -> HTTP/технологии.
+// Оркестрирует subfinder, dnsx, naabu, httpx. Все хосты фильтруются по scope.
+package recon
+
+import (
+	"context"
+	"encoding/json"
+	"sort"
+	"strings"
+	"sync"
+
+	"pentkit/internal/analyze"
+	"pentkit/internal/config"
+	"pentkit/internal/event"
+	"pentkit/internal/runner"
+	"pentkit/internal/scope"
+	"pentkit/internal/store"
+)
+
+// Result — сводка recon для передачи дальше по пайплайну.
+type Result struct {
+	Subdomains []string          // все найденные поддомены в скоупе
+	Resolved   map[string]string // host -> IP (A-запись)
+	HTTP       []HTTPService     // живые HTTP(S)-сервисы
+}
+
+// URLs возвращает список URL живых сервисов.
+func (r *Result) URLs() []string {
+	var u []string
+	for _, s := range r.HTTP {
+		u = append(u, s.URL)
+	}
+	return u
+}
+
+// HTTPService — живой веб-сервис, найденный httpx.
+type HTTPService struct {
+	URL    string
+	Host   string
+	Status int
+	Title  string
+	Tech   []string
+	Server string
+	IP     string
+}
+
+type httpxLine struct {
+	URL        string   `json:"url"`
+	Input      string   `json:"input"`
+	Host       string   `json:"host"`
+	StatusCode int      `json:"status_code"`
+	Title      string   `json:"title"`
+	Tech       []string `json:"tech"`
+	Webserver  string   `json:"webserver"`
+	A          []string `json:"a"`
+}
+
+// Run выполняет разведку по всем доменам скоупа.
+func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Runner, st *store.Store, ev event.Sink) (*Result, error) {
+	res := &Result{Resolved: map[string]string{}}
+	subSet := map[string]bool{}
+	var subMu sync.Mutex
+
+	// 1. Поддомены (subfinder, пассивно) — домены обрабатываем параллельно:
+	//    subfinder по каждому домену независим, незачем ждать их по очереди.
+	if !rn.Has("subfinder") {
+		ev.Logln("  ! subfinder не установлен — пропускаю перебор поддоменов")
+	}
+	var wgSub sync.WaitGroup
+	for _, d := range sc.Domains() {
+		subMu.Lock()
+		subSet[d] = true
+		subMu.Unlock()
+		if !rn.Has("subfinder") {
+			continue
+		}
+		wgSub.Add(1)
+		go func(d string) {
+			defer wgSub.Done()
+			r := rn.Run(ctx, "subfinder", "-silent", "-d", d)
+			if r.Err != nil {
+				ev.Logf("  ! subfinder %s: %v\n", d, r.Err)
+			}
+			subMu.Lock()
+			for _, h := range r.Lines {
+				if sc.InScope(h) {
+					subSet[strings.ToLower(h)] = true
+				}
+			}
+			subMu.Unlock()
+		}(d)
+	}
+	wgSub.Wait()
+	// Пассивное расширение поверхности: amass + assetfinder.
+	for _, h := range analyze.ExtraSubdomains(ctx, rn, sc, ev, sc.Domains()) {
+		subSet[strings.ToLower(h)] = true
+	}
+	for h := range subSet {
+		res.Subdomains = append(res.Subdomains, h)
+	}
+	sort.Strings(res.Subdomains)
+	for _, h := range res.Subdomains {
+		st.Add(store.Finding{Target: h, Type: store.TypeSubdomain, Severity: store.SevInfo,
+			Title: "Поддомен в скоупе", Tool: "subfinder"})
+	}
+	ev.Logf("  поддоменов в скоупе: %d\n", len(res.Subdomains))
+	if len(res.Subdomains) == 0 {
+		return res, nil
+	}
+
+	// 2. Резолв (dnsx).
+	hostsBlob := strings.Join(res.Subdomains, "\n")
+	live := res.Subdomains
+	if rn.Has("dnsx") {
+		r := rn.RunStdin(ctx, hostsBlob, "dnsx", "-silent", "-a", "-resp", "-json")
+		var resolved []string
+		for _, line := range r.Lines {
+			var d struct {
+				Host string   `json:"host"`
+				A    []string `json:"a"`
+			}
+			if json.Unmarshal([]byte(line), &d) != nil || d.Host == "" {
+				continue
+			}
+			resolved = append(resolved, d.Host)
+			if len(d.A) > 0 {
+				res.Resolved[d.Host] = d.A[0]
+				st.Add(store.Finding{Target: d.Host, Type: store.TypeDNS, Severity: store.SevInfo,
+					Title: "Резолвится в " + strings.Join(d.A, ", "), Tool: "dnsx"})
+			}
+		}
+		if len(resolved) > 0 {
+			live = resolved
+		}
+		ev.Logf("  резолвится хостов: %d\n", len(resolved))
+	} else {
+		ev.Logln("  ! dnsx не установлен — пропускаю резолв")
+	}
+
+	// 3. Порты (naabu).
+	switch {
+	case rn.Passive:
+		ev.Logln("  пассивный режим: пропускаю скан портов (naabu) — слишком шумно для WAF/Firewall")
+	case rn.Has("naabu"):
+		naabuArgs := []string{"-silent", "-top-ports", "100", "-json"}
+		if rn.Proxied() {
+			// connect-скан: SYN-пакеты мимо proxychains утекли бы в обход Tor.
+			naabuArgs = append(naabuArgs, "-s", "c")
+		}
+		if rn.Stealthy() {
+			naabuArgs = append(naabuArgs, "-c", "10", "-retries", "1")
+		}
+		if cfg.RateLimit > 0 {
+			naabuArgs = append(naabuArgs, "-rate", itoa(cfg.RateLimit))
+		}
+		r := rn.RunStdin(ctx, strings.Join(live, "\n"), "naabu", naabuArgs...)
+		for _, line := range r.Lines {
+			var p struct {
+				Host string `json:"host"`
+				IP   string `json:"ip"`
+				Port int    `json:"port"`
+			}
+			if json.Unmarshal([]byte(line), &p) != nil {
+				continue
+			}
+			target := p.Host
+			if target == "" {
+				target = p.IP
+			}
+			st.Add(store.Finding{Target: target, Type: store.TypePort, Severity: store.SevInfo,
+				Title: "Открыт порт " + itoa(p.Port), Detail: p.IP, Tool: "naabu"})
+		}
+	default:
+		ev.Logln("  ! naabu не установлен — пропускаю скан портов")
+	}
+
+	// 4. HTTP + технологии (httpx).
+	if rn.Has("httpx") {
+		httpxArgs := []string{"-silent", "-json", "-title", "-tech-detect", "-status-code", "-web-server", "-a"}
+		if rn.Stealthy() {
+			// случайный User-Agent + мало потоков, чтобы пробы не выделялись
+			// единой подписью и частотой (иначе WAF быстро банит по rate).
+			httpxArgs = append(httpxArgs, "-random-agent", "-threads", "10")
+		}
+		if cfg.RateLimit > 0 {
+			httpxArgs = append(httpxArgs, "-rate-limit", itoa(cfg.RateLimit))
+		}
+		r := rn.RunStdin(ctx, strings.Join(live, "\n"), "httpx", httpxArgs...)
+		for _, line := range r.Lines {
+			var h httpxLine
+			if json.Unmarshal([]byte(line), &h) != nil || h.URL == "" {
+				continue
+			}
+			svc := HTTPService{URL: h.URL, Host: h.Host, Status: h.StatusCode,
+				Title: h.Title, Tech: h.Tech, Server: h.Webserver}
+			if len(h.A) > 0 {
+				svc.IP = h.A[0]
+			}
+			res.HTTP = append(res.HTTP, svc)
+			st.Add(store.Finding{Target: h.URL, Type: store.TypeHTTP, Severity: store.SevInfo,
+				Title:  "HTTP " + itoa(h.StatusCode) + " — " + h.Title,
+				Detail: "server: " + h.Webserver, Tool: "httpx"})
+			for _, t := range h.Tech {
+				st.Add(store.Finding{Target: h.URL, Type: store.TypeTech, Severity: store.SevInfo,
+					Title: "Технология: " + t, Tool: "httpx"})
+			}
+		}
+		ev.Logf("  живых HTTP-сервисов: %d\n", len(res.HTTP))
+	} else {
+		ev.Logln("  ! httpx не установлен — пропускаю HTTP-пробинг")
+	}
+
+	return res, nil
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	var b [20]byte
+	i := len(b)
+	for n > 0 {
+		i--
+		b[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		b[i] = '-'
+	}
+	return string(b[i:])
+}
