@@ -198,6 +198,8 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 		terms := append(products, exploit.ProductsFromStore(st)...)
 		exploit.Searchsploit(ctx, rn, st, ev, terms)
 		exploit.MetasploitScript(st, ev, cfg.Engagement.Name, nmapXML, cves)
+		// Маппинг CVE per host:port: каждый открытый порт с версией → searchsploit → TypeCVE находки.
+		exploit.MapPortCVEs(ctx, rn, st, ev, nmapXML)
 	}
 
 	if opts.MsfCheck {
