@@ -59,7 +59,7 @@ var registry = []tool{
 	{"subzy", []step{{kindGo, "github.com/PentestPad/subzy@latest"}}},
 	{"gowitness", []step{{kindGo, "github.com/sensepost/gowitness@latest"}}},
 	{"ffuf", []step{{kindGo, "github.com/ffuf/ffuf/v2@latest"}}},
-	{"kr", []step{{kindGo, "github.com/assetnote/kiterunner/cmd/kr@latest"}}},
+	{"kr", []step{{kindSh, krInstall}}},
 	{"tlsx", []step{{kindGo, "github.com/projectdiscovery/tlsx/cmd/tlsx@latest"}}},
 	{"interactsh-client", []step{{kindGo, "github.com/projectdiscovery/interactsh/cmd/interactsh-client@latest"}}},
 	{"notify", []step{{kindGo, "github.com/projectdiscovery/notify/cmd/notify@latest"}}},
@@ -68,8 +68,8 @@ var registry = []tool{
 	{"uncover", []step{{kindGo, "github.com/projectdiscovery/uncover/cmd/uncover@latest"}}},
 	{"cdncheck", []step{{kindGo, "github.com/projectdiscovery/cdncheck/cmd/cdncheck@latest"}}},
 	{"Gxss", []step{{kindGo, "github.com/KathanP19/Gxss@latest"}}},
-	{"trufflehog", []step{{kindGo, "github.com/trufflesecurity/trufflehog/v3@latest"}}},
-	{"gitleaks", []step{{kindGo, "github.com/gitleaks/gitleaks/v8@latest"}}},
+	{"trufflehog", []step{{kindSh, trufflehogInstall}}},
+	{"gitleaks", []step{{kindGo, "github.com/zricethezav/gitleaks/v8@latest"}}},
 
 	// --- apt-тулы (нужен root/sudo); где есть — с go/pipx-фолбэком ---
 	{"nmap", []step{{kindApt, "nmap"}}},
@@ -95,8 +95,9 @@ var registry = []tool{
 	{"ldapsearch", []step{{kindApt, "ldap-utils"}}},
 	{"searchsploit", []step{{kindApt, "exploitdb"}}},
 	{"msfconsole", []step{{kindApt, "metasploit-framework"}}},
-	{"testssl.sh", []step{{kindApt, "testssl.sh"}}},
+	{"testssl", []step{{kindApt, "testssl.sh"}}},
 	{"proxychains4", []step{{kindApt, "proxychains4"}}},
+	{"tor", []step{{kindApt, "tor"}}}, // анонимизация трафика (SOCKS5 9050)
 	{"amass", []step{{kindApt, "amass"}, {kindGo, "github.com/owasp-amass/amass/v4/...@master"}}},
 	{"wafw00f", []step{{kindApt, "wafw00f"}, {kindPipx, "wafw00f"}}},
 	{"theharvester", []step{{kindApt, "theharvester"}, {kindPipx, "theHarvester"}}},
@@ -118,9 +119,30 @@ var prereqApt = []string{
 	"git", "golang-go", "python3-pip", "pipx", "libpcap-dev", "ruby",
 	"cargo",           // сборка Rust-тулов (x8, rustscan)
 	"build-essential", // компиляция нативных зависимостей
+	"make",            // сборка kiterunner и пр.
+	"libssl-dev",      // openssl-sys для x8 и других Rust-крейтов
+	"pkg-config",      // поиск системных библиотек при сборке
 	"curl", "wget",    // загрузки
+	"tor",      // анонимизация (SOCKS5 9050)
 	"seclists", // словари (x8/dirbust используют config.wordlists)
 }
+
+// krInstall собирает kiterunner из исходников (нет go install cmd/kr).
+const krInstall = `set -e
+command -v go >/dev/null 2>&1 || { echo "нет go"; exit 1; }
+DIR="$(mktemp -d)"
+git clone --depth 1 https://github.com/assetnote/kiterunner "$DIR"
+( cd "$DIR" && make build )
+mkdir -p "$HOME/.local/bin"
+cp "$DIR/dist/kr" "$HOME/.local/bin/kr"
+chmod +x "$HOME/.local/bin/kr"
+rm -rf "$DIR"`
+
+// trufflehogInstall ставит trufflehog официальным скриптом (go install ломается
+// из-за replace-директив в go.mod).
+const trufflehogInstall = `set -e
+mkdir -p "$HOME/.local/bin"
+curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b "$HOME/.local/bin"`
 
 const jwtToolInstall = `set -e
 DIR="$HOME/.local/share/jwt_tool"
