@@ -61,7 +61,9 @@ func Run(ctx context.Context, cfg *config.Config, rn *runner.Runner, st *store.S
 	nArgs := []string{"-silent", "-jsonl", "-severity", "low,medium,high,critical", "-rate-limit", rate}
 	if rn.Stealthy() {
 		// Меньше параллелизма и случайный User-Agent — тише для WAF/IPS.
-		nArgs = append(nArgs, "-c", "10", "-timeout", "10", "-H", "User-Agent: "+netx.RandomUA())
+		// X-Forwarded-For: 127.0.0.1 — частый обход WAF/ACL по IP-доверию.
+		nArgs = append(nArgs, "-c", "10", "-timeout", "10",
+			"-H", "User-Agent: "+netx.RandomUA(), "-H", "X-Forwarded-For: 127.0.0.1")
 	}
 	r := rn.RunStdin(ctx, strings.Join(urls, "\n"), "nuclei", nArgs...)
 	if r.Err != nil {

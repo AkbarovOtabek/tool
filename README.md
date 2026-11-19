@@ -118,7 +118,12 @@ naabu требует `libpcap-dev`. seclists нужен для словарей 
 | cloudflare | crt.sh, Shodan, SecurityTrails, DNS | детект CF, поиск **и подтверждение** origin в обход WAF |
 | crawl | katana, gau, waybackurls, gf | краулинг + архивы + сортировка URL по типам инъекций (xss/sqli/ssrf/lfi/redirect) |
 | secrets | встроенный regex, SecretFinder | утечки ключей/токенов (AWS/Google/Slack/GitHub/Stripe/JWT/private key) в JS |
-| vuln | nuclei | уязвимости по шаблонам + отсев ложных + перепроверка |
+| exposure | встроенный | открытые `.git`/`.svn`/`.env`/бэкапы, Spring `/actuator`(+`/env`,`/heapdump`), Swagger/OpenAPI, GraphQL-интроспекция, phpinfo, `/server-status`, `.htpasswd` — **с валидацией тела** |
+| jwt | встроенный, jwt_tool | JWT: `alg:none`, подбор слабого HMAC-секрета (подделываемые токены), подсказка RS256→HS256, токен без `exp` |
+| apidisco | kiterunner (kr) | брутфорс скрытых API-эндпоинтов по словарям Assetnote |
+| bypass | встроенный | обход `401`/`403` (broken access control): `X-Forwarded-For`/`X-Original-URL`/трюки с путём, **с проверкой результата** |
+| authtest (⚠) | встроенный | активная проверка отсутствия rate-limit на `/login`,`/reset` (серия ложных логинов, по согласованию) |
+| vuln | nuclei | уязвимости по шаблонам + отсев ложных + перепроверка (в stealth добавляет `X-Forwarded-For: 127.0.0.1` для обхода WAF) |
 | web | feroxbuster/ffuf, arjun, dalfox, встроенный клиент | рекурсивный дирбаст, параметры, XSS (+dalfox pipe по gf), CORS-мисконфиг, security-заголовки |
 | sqli (⚠) | sqlmap, nuclei -dast | активные SQL-инъекции и DAST-фаззинг по gf-кандидатам (по согласованию) |
 | wordpress | wpscan | аудит WordPress-сайтов |
@@ -275,6 +280,8 @@ internal/analyze        whatweb/wafw00f/wpscan/theHarvester/amass/assetfinder/fi
 internal/cloudflare     детект CF + поиск и подтверждение origin
 internal/crawl          katana + gau + waybackurls + gf-сортировка по типам инъекций
 internal/secrets        поиск утечек ключей/токенов в JS (regex + SecretFinder)
+internal/exposure       открытые .git/.env/actuator/swagger/бэкапы (с валидацией тела)
+internal/apisec         JWT (alg:none/слабый секрет/RS256→HS256) / обход 401-403 / kiterunner / rate-limit входа
 internal/vuln           nuclei + отсев FP
 internal/web            feroxbuster/ffuf / arjun / dalfox (+pipe) / CORS-аудит
 internal/extra          testssl / nikto / takeover (nuclei+subzy) / gowitness

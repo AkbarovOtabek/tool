@@ -78,6 +78,10 @@ type scanRequest struct {
 		Vuln        bool `json:"vuln"`
 		Secrets     bool `json:"secrets"`
 		Exposure    bool `json:"exposure"`
+		JWT         bool `json:"jwt"`
+		APIDisco    bool `json:"apidisco"`
+		Bypass      bool `json:"bypass"`
+		AuthTest    bool `json:"authtest"`
 		Web         bool `json:"web"`
 		SQLi        bool `json:"sqli"`
 		WordPress   bool `json:"wordpress"`
@@ -212,7 +216,8 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 		Cloudflare: req.Options.Cloudflare, Crawl: req.Options.Crawl,
 		Fingerprint: req.Options.Fingerprint, OSINT: req.Options.OSINT,
 		Vuln: req.Options.Vuln, Secrets: req.Options.Secrets,
-		Exposure: req.Options.Exposure,
+		Exposure: req.Options.Exposure, JWT: req.Options.JWT,
+		APIDisco: req.Options.APIDisco, Bypass: req.Options.Bypass, AuthTest: req.Options.AuthTest,
 		Web:      req.Options.Web, SQLi: req.Options.SQLi,
 		WordPress: req.Options.WordPress, TLS: req.Options.TLS,
 		Nikto: req.Options.Nikto, Takeover: req.Options.Takeover,
