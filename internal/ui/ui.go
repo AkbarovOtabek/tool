@@ -27,6 +27,7 @@ import (
 	"pentkit/internal/proxy"
 	"pentkit/internal/runner"
 	"pentkit/internal/scope"
+	"pentkit/internal/setup"
 	"pentkit/internal/store"
 )
 
@@ -70,6 +71,7 @@ type scanRequest struct {
 	Proxy         string `json:"proxy"`
 	Stealth       bool   `json:"stealth"`
 	Passive       bool   `json:"passive"`
+	Install       bool   `json:"install"` // доустановить недостающие тулы перед запуском
 	Options       struct {
 		Cloudflare  bool `json:"cloudflare"`
 		Crawl       bool `json:"crawl"`
@@ -106,6 +108,7 @@ func Serve(addr string) error {
 	mux.HandleFunc("/", s.handleIndex)
 	mux.HandleFunc("/api/tools", s.auth(s.handleTools))
 	mux.HandleFunc("/api/scan", s.auth(s.handleScan))
+	mux.HandleFunc("/api/setup", s.auth(s.handleSetup))
 	mux.HandleFunc("/api/status", s.auth(s.handleStatus))
 	mux.HandleFunc("/api/findings", s.auth(s.handleFindings))
 	mux.HandleFunc("/api/stop", s.auth(s.handleStop))
@@ -170,7 +173,7 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
 		"wafw00f", "wpscan", "sqlmap", "theHarvester",
 		// скрытность и новые white-hat тулы
 		"proxychains4", "findomain", "waybackurls", "gf", "feroxbuster",
-		"subzy", "SecretFinder"}
+		"subzy", "SecretFinder", "kr", "jwt_tool"}
 	res := map[string]bool{}
 	for _, t := range tools {
 		res[t] = rn.Has(t)
@@ -218,7 +221,7 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 		Vuln: req.Options.Vuln, Secrets: req.Options.Secrets,
 		Exposure: req.Options.Exposure, JWT: req.Options.JWT,
 		APIDisco: req.Options.APIDisco, Bypass: req.Options.Bypass, AuthTest: req.Options.AuthTest,
-		Web:      req.Options.Web, SQLi: req.Options.SQLi,
+		Web: req.Options.Web, SQLi: req.Options.SQLi,
 		WordPress: req.Options.WordPress, TLS: req.Options.TLS,
 		Nikto: req.Options.Nikto, Takeover: req.Options.Takeover,
 		Screenshots: req.Options.Screenshots, Nmap: req.Options.Nmap,
@@ -245,6 +248,11 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 		rn := runner.New(cfg.Timeout.Duration, false)
 		rn.Passive = req.Passive
 		rn.Stealth = cfg.Stealth
+		// Автоустановка недостающих тулов — до proxychains, чтобы установочный
+		// трафик шёл напрямую, и до пайплайна (обновляет PATH/кэш наличия).
+		if req.Install {
+			setup.Install(ctx, rn, sink)
+		}
 		if addr, on := cfg.SOCKS(); on {
 			if err := netx.Check(addr, 5*time.Second); err != nil {
 				sink.Logf("✖ Tor/прокси недоступен: %v — запусти сервис tor или задай proxy\n", err)
@@ -284,6 +292,58 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	writeJSON(w, map[string]any{"ok": true, "engagement": cfg.Engagement.Name})
+}
+
+// handleSetup запускает автоустановку тулов отдельно, со стримингом в общий лог.
+func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	if s.job != nil && !s.job.done {
+		s.mu.Unlock()
+		http.Error(w, "процесс уже идёт", http.StatusConflict)
+		return
+	}
+	s.mu.Unlock()
+
+	dir, err := os.MkdirTemp("", "pentkit-setup-")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	st, err := store.Open(dir)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	sink := event.NewBuffered()
+	ctx, cancel := context.WithCancel(context.Background())
+	cfg := &config.Config{}
+	cfg.Engagement.Name = "setup"
+	j := &job{sink: sink, st: st, cfg: cfg, cancel: cancel}
+	s.mu.Lock()
+	s.job = j
+	s.mu.Unlock()
+
+	go func() {
+		sink.Start()
+		defer func() {
+			if rec := recover(); rec != nil {
+				s.mu.Lock()
+				j.err = fmt.Sprintf("внутренняя ошибка: %v", rec)
+				j.done = true
+				s.mu.Unlock()
+			}
+			sink.Finish()
+			st.Close()
+			os.RemoveAll(dir)
+		}()
+		rn := runner.New(15*time.Minute, false)
+		setup.Install(ctx, rn, sink)
+		s.mu.Lock()
+		j.done = true
+		s.mu.Unlock()
+	}()
+
+	writeJSON(w, map[string]any{"ok": true})
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, r *http.Request) {

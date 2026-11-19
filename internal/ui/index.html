@@ -176,7 +176,9 @@ a{color:var(--accent)}
           <button class="act" id="start">▶ Запустить скан</button>
           <button class="ghost" id="stop" disabled>■ Стоп</button>
           <button class="ghost" id="report" disabled>📄 Открыть отчёт</button>
+          <button class="ghost" id="setupBtn" title="apt/go/pipx — apt требует root/sudo">⬇ Установить тулы</button>
         </div>
+        <label class="mod" style="margin-top:10px"><input type="checkbox" id="install"><span class="body"><span class="name">⬇ Доустановить недостающие тулы перед запуском</span><span class="desc">Ставит отсутствующие тулы (nuclei/httpx/ffuf… через go install, nmap/sqlmap/… через apt). apt требует root/sudo; go-тулы ставятся без root. Прогресс — в журнале ниже.</span></span></label>
         <div class="stage" id="stage" style="margin-top:12px">Готов к запуску. Выбери режим выше и заполни обязательные поля.</div>
         <div class="log" id="log" style="margin-top:8px">журнал появится после запуска…</div>
 
@@ -317,7 +319,7 @@ const PROFILES=[
    desc:"Выбрать модули вручную в «Тонкой настройке».",mods:null}
 ];
 const AVAIL={}; // key -> тул доступен
-let curProfile="defend", filter="all", search="", poll=null, lastFindings=[];
+let curProfile="defend", filter="all", search="", poll=null, lastFindings=[], lastWasSetup=false;
 function el(id){return document.getElementById(id)}
 function esc(s){return(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 
@@ -398,6 +400,7 @@ function collect(){
     domains:el("domains").value,cidrs:el("cidrs").value,out_of_scope:el("oos").value,
     concurrency:parseInt(el("conc").value||"10"),
     tor:el("tor").checked,stealth:el("stealth").checked,passive:el("passive").checked,proxy:el("proxy").value,
+    install:el("install").checked,
     options:o};
 }
 
@@ -408,12 +411,23 @@ async function start(){
   if(!Object.values(body.options).some(Boolean)){alert("Выбери хотя бы один модуль (режим выше или «Тонкая настройка»).");return}
   const r=await fetch("/api/scan",{method:"POST",headers:H,body:JSON.stringify(body)});
   if(!r.ok){alert("Ошибка: "+await r.text());return}
-  el("start").disabled=true;el("stop").disabled=false;el("report").disabled=true;
+  lastWasSetup=false;
+  el("start").disabled=true;el("stop").disabled=false;el("report").disabled=true;el("setupBtn").disabled=true;
   el("live").innerHTML='<span class="spin"></span>';
   el("log").textContent="";
   if(poll)clearInterval(poll);poll=setInterval(tick,1500);tick();
 }
 async function stop(){await fetch("/api/stop",{method:"POST",headers:H})}
+
+async function doSetup(){
+  if(!confirm("Доустановить недостающие тулы?\n\n• go-тулы (nuclei/httpx/ffuf…) — ставятся без root\n• apt-тулы (nmap/sqlmap/metasploit…) — потребуют root/sudo\n\nПрогресс будет в журнале ниже."))return;
+  const r=await fetch("/api/setup",{method:"POST",headers:H});
+  if(!r.ok){alert("Ошибка: "+await r.text());return}
+  lastWasSetup=true;
+  el("start").disabled=true;el("setupBtn").disabled=true;el("stop").disabled=false;el("report").disabled=true;
+  el("live").innerHTML='<span class="spin"></span>';el("log").textContent="";
+  if(poll)clearInterval(poll);poll=setInterval(tick,1500);tick();
+}
 
 async function tick(){
   let s;try{s=await(await fetch("/api/status",{headers:H})).json()}catch(e){return}
@@ -423,8 +437,9 @@ async function tick(){
   loadFindings();
   if(!s.running&&s.done){
     clearInterval(poll);poll=null;
-    el("start").disabled=false;el("stop").disabled=true;
+    el("start").disabled=false;el("stop").disabled=true;el("setupBtn").disabled=false;
     el("report").disabled=!s.reportReady;
+    if(lastWasSetup){lastWasSetup=false;loadTools();} // обновить бейджи наличия после установки
     el("live").innerHTML=s.error?'<span style="color:#f3a6a6;font-size:13px">ошибка</span>':'<span style="color:#6ee7a0;font-size:13px">✓ готово</span>';
     if(s.error)el("stage").textContent="Ошибка: "+s.error;
     else el("stage").textContent="Скан завершён. "+(s.reportReady?"Отчёт готов — кнопка «Открыть отчёт».":"");
@@ -541,6 +556,7 @@ el("themeBtn").onclick=toggleTheme;
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 el("start").onclick=start;
 el("stop").onclick=stop;
+el("setupBtn").onclick=doSetup;
 el("report").onclick=()=>window.open("/api/report?t="+TOKEN,"_blank");
 el("fsearch").addEventListener("input",e=>{search=e.target.value.trim();renderFindings()});
 el("ssbtn").onclick=doSearchsploit;

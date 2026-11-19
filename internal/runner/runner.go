@@ -71,6 +71,12 @@ func (r *Runner) Has(tool string) bool {
 	return ok
 }
 
+// Refresh сбрасывает кэш наличия тулов — вызывать после установки новых,
+// иначе Has продолжит возвращать старый (false) результат из кэша.
+func (r *Runner) Refresh() {
+	r.present.Range(func(k, _ any) bool { r.present.Delete(k); return true })
+}
+
 // Result — результат запуска.
 type Result struct {
 	Lines    []string // stdout по строкам (без пустых)

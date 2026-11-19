@@ -67,9 +67,25 @@ cp config.example.yaml config.yaml   # заполни scope, авторизац�
 Результаты: `engagements/<name>/findings.jsonl`, `report.md`, `report.html`,
 `screenshots/`.
 
-## Установка тулов на Kali
+## Установка тулов
 
 Любой тул необязателен: если его нет в PATH, шаг пропускается с предупреждением.
+
+**Автоматически (рекомендуется):**
+
+```bash
+sudo ./pentkit setup        # доустановит всё недостающее: apt + go install + pipx + git
+```
+
+- `pentkit run` **сам доустанавливает** недостающие тулы перед сканом (отключить: `--no-install`);
+- `pentkit scan|web|recon` — добавь флаг `--install`;
+- в веб-интерфейсе — кнопка **«⬇ Установить тулы»** или галочка **«Доустановить перед запуском»** (прогресс в журнале).
+
+go-тулы (nuclei/httpx/subfinder/katana/ffuf/dalfox/…) ставятся **без root**; apt-тулы
+(nmap/sqlmap/metasploit/…) требуют root или sudo. Что не удалось — выводится списком,
+такой модуль просто пропускается. Установочный трафик идёт напрямую, минуя Tor/proxychains.
+
+**Вручную (Kali):**
 
 ```bash
 sudo apt update
