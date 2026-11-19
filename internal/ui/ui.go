@@ -111,6 +111,7 @@ func Serve(addr string) error {
 	mux.HandleFunc("/api/exploit/info", s.auth(s.handleExploitInfo))
 	mux.HandleFunc("/api/exploit/searchsploit", s.auth(s.handleSearchsploit))
 	mux.HandleFunc("/api/exploit/check", s.auth(s.handleMsfCheck))
+	mux.HandleFunc("/api/exploit/run", s.auth(s.handleMsfRun))
 
 	// Прокси (Burp-режим): перехват, история, Intercept, Repeater.
 	mux.HandleFunc("/proxy", s.handleProxyPage)
@@ -342,6 +343,7 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 // moduleRe/targetRe — защита от инъекции в аргументы msfconsole.
 var moduleRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9/_.\-]*$`)
 var targetRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9.\-:]*$`)
+var payloadRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9/_]*$`)
 
 func (s *Server) curJob() *job { s.mu.Lock(); defer s.mu.Unlock(); return s.job }
 
@@ -437,6 +439,84 @@ func (s *Server) handleMsfCheck(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
 		"cmd":    "msfconsole -q -x \"" + x + "\"",
 		"output": strings.TrimSpace(res.Stdout + "\n" + res.Stderr),
+	})
+}
+
+// handleMsfRun — БОЕВОЙ запуск модуля Metasploit по нажатию кнопки (не автомат).
+// Предохранители: цель строго в scope, аргументы валидируются, факт запуска
+// пишется в лог работы как доказательство. Сессия бэкграундится (exploit -z),
+// чтобы веб-вызов не висел на интерактивном шелле; дальше — в msfconsole.
+func (s *Server) handleMsfRun(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Module  string `json:"module"`
+		Target  string `json:"target"`
+		LHost   string `json:"lhost"`
+		LPort   string `json:"lport"`
+		Payload string `json:"payload"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	module := strings.TrimSpace(req.Module)
+	target := strings.TrimSpace(req.Target)
+	if !moduleRe.MatchString(module) || !targetRe.MatchString(target) {
+		http.Error(w, "неверный модуль или цель", http.StatusBadRequest)
+		return
+	}
+	j := s.curJob()
+	if j == nil {
+		http.Error(w, "сначала запусти скан — нужен scope цели", http.StatusBadRequest)
+		return
+	}
+	host := target
+	if h, _, err := net.SplitHostPort(target); err == nil {
+		host = h
+	}
+	if !j.sc.InScope(host) {
+		http.Error(w, "цель вне scope — отклонено (защита от выхода за рамки разрешения)", http.StatusForbidden)
+		return
+	}
+	// Сборка команды msf с валидацией каждого аргумента.
+	cmds := []string{"use " + module, "set RHOSTS " + target}
+	if p := strings.TrimSpace(req.Payload); p != "" {
+		if !payloadRe.MatchString(p) {
+			http.Error(w, "неверный payload", http.StatusBadRequest)
+			return
+		}
+		cmds = append(cmds, "set PAYLOAD "+p)
+	}
+	if lh := strings.TrimSpace(req.LHost); lh != "" {
+		if net.ParseIP(lh) == nil {
+			http.Error(w, "LHOST должен быть IP", http.StatusBadRequest)
+			return
+		}
+		cmds = append(cmds, "set LHOST "+lh)
+	}
+	if lp := strings.TrimSpace(req.LPort); lp != "" {
+		if n, err := strconv.Atoi(lp); err != nil || n < 1 || n > 65535 {
+			http.Error(w, "LPORT 1..65535", http.StatusBadRequest)
+			return
+		}
+		cmds = append(cmds, "set LPORT "+lp)
+	}
+	cmds = append(cmds, "exploit -z", "sessions -l", "exit")
+	x := strings.Join(cmds, "; ")
+
+	rn := runner.New(6*time.Minute, false)
+	if !rn.Has("msfconsole") {
+		http.Error(w, "msfconsole не установлен (apt install metasploit-framework)", http.StatusBadRequest)
+		return
+	}
+	// Доказательство в лог работы: кто/что/когда запускал боевой модуль.
+	j.st.Add(store.Finding{Target: target, Type: store.TypeVuln, Severity: store.SevHigh,
+		Title: "Запущен боевой модуль: " + module, Detail: "payload: " + req.Payload,
+		Evidence: "ручной запуск через веб (exploit); результат — см. ниже", Tool: "metasploit",
+		Tags: []string{"exploit-run", "manual"}})
+	res := rn.Run(r.Context(), "msfconsole", "-q", "-x", x)
+	out := strings.TrimSpace(res.Stdout + "\n" + res.Stderr)
+	session := strings.Contains(out, "session") && (strings.Contains(out, "opened") || strings.Contains(strings.ToLower(out), "meterpreter"))
+	writeJSON(w, map[string]any{
+		"cmd":     "msfconsole -q -x \"" + x + "\"",
+		"output":  out,
+		"session": session,
 	})
 }
 

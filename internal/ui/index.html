@@ -62,6 +62,8 @@ textarea{resize:vertical;min-height:60px;font-family:ui-monospace,monospace}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px}
 button.act{background:var(--accent);color:var(--accent-fg);border:0;border-radius:8px;padding:9px 18px;font-size:14px;font-weight:600;cursor:pointer}
 button.ghost{background:transparent;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer}
+button.danger{background:#b91c1c;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:700;cursor:pointer}
+button.danger:hover{background:#991b1b}
 button:disabled{opacity:.5;cursor:not-allowed}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
 .chip{padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;color:#fff}
@@ -191,9 +193,10 @@ a{color:var(--accent)}
         <div class="log" id="excmd" style="height:auto;min-height:72px"></div>
         <div class="row">
           <button class="ghost" id="excopy">⧉ Копировать</button>
-          <button class="act" id="excheck">▶ Запустить check (неинтрузивно)</button>
+          <button class="act" id="excheck">▶ check (неинтрузивно)</button>
+          <button class="danger" id="exrun">🧨 Эксплуатировать (боевой)</button>
         </div>
-        <div class="hint">check только проверяет уязвимость, не эксплуатирует. Цель проверяется по scope — вне scope будет отказ.</div>
+        <div class="hint">check только подтверждает уязвимость. «Эксплуатировать» запускает модуль по-настоящему (по нажатию, не автоматически) — цель проверяется по scope, факт запуска пишется в отчёт. Некоторые эксплойты могут нарушить работу сервиса — сначала жми check.</div>
         <div class="log" id="exout" style="height:200px;margin-top:8px;display:none"></div>
       </div>
     </div>
@@ -301,6 +304,20 @@ async function doMsfCheck(){
     const d=await r.json();out.textContent="$ "+d.cmd+"\n\n"+(d.output||"(пустой вывод)");
   }catch(e){out.textContent="ошибка: "+e.message}
 }
+async function doMsfRun(){
+  const module=el("exmod").value.trim(),target=el("exrhost").value.trim();
+  if(!module||!target){alert("Укажи модуль и RHOSTS");return}
+  if(!confirm("БОЕВОЙ запуск эксплойта\n\nМодуль: "+module+"\nЦель: "+target+"\n\nЗапустить по-настоящему? (убедись, что цель в scope и есть разрешение)"))return;
+  const body={module,target,lhost:el("exlhost").value.trim(),lport:el("exlport").value.trim(),payload:el("expayload").value};
+  const out=el("exout");out.style.display="block";out.textContent="🧨 Эксплуатирую "+target+" ... (до нескольких минут)";
+  try{const r=await fetch("/api/exploit/run",{method:"POST",headers:H,body:JSON.stringify(body)});
+    if(!r.ok){out.textContent="✖ "+await r.text();return}
+    const d=await r.json();
+    out.textContent=(d.session?"✅ Похоже, сессия открыта!\n\n":"")+"$ "+d.cmd+"\n\n"+(d.output||"(пустой вывод)")+
+      (d.session?"\n\n→ Для интерактивной работы с сессией запусти эту же команду в msfconsole (кнопка «Копировать»).":"");
+    loadFindings&&loadFindings();
+  }catch(e){out.textContent="ошибка: "+e.message}
+}
 
 /* ---- модули ---- */
 async function loadTools(){
@@ -386,6 +403,7 @@ el("ssq").addEventListener("keydown",e=>{if(e.key==="Enter")doSearchsploit()});
 el("expayload").addEventListener("change",buildMsfCmd);
 el("excopy").onclick=()=>copyText(el("excmd").textContent);
 el("excheck").onclick=doMsfCheck;
+el("exrun").onclick=doMsfRun;
 el("exrccopy").onclick=()=>{const p=el("exrc").dataset.rc;if(p)copyText("msfconsole -q -r "+p)};
 loadTools();tick();
 </script>
