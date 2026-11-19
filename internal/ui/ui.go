@@ -75,6 +75,9 @@ type scanRequest struct {
 	Install       bool   `json:"install"` // доустановить недостающие тулы перед запуском
 	LeakixKey     string `json:"leakix_key"`
 	IntelxKey     string `json:"intelx_key"`
+	TgToken       string `json:"tg_token"`
+	TgChat        string `json:"tg_chat"`
+	SlackHook     string `json:"slack_hook"`
 	Options       struct {
 		Cloudflare  bool `json:"cloudflare"`
 		Crawl       bool `json:"crawl"`
@@ -89,6 +92,8 @@ type scanRequest struct {
 		AuthTest    bool `json:"authtest"`
 		Leaks       bool `json:"leaks"`
 		Smuggle     bool `json:"smuggle"`
+		BruteDNS    bool `json:"brutedns"`
+		Notify      bool `json:"notify"`
 		Web         bool `json:"web"`
 		SQLi        bool `json:"sqli"`
 		WordPress   bool `json:"wordpress"`
@@ -179,7 +184,10 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
 		"wafw00f", "wpscan", "sqlmap", "theHarvester",
 		// скрытность и новые white-hat тулы
 		"proxychains4", "findomain", "waybackurls", "gf", "feroxbuster",
-		"subzy", "SecretFinder", "kr", "jwt_tool"}
+		"subzy", "SecretFinder", "kr", "jwt_tool",
+		// новые тулы
+		"tlsx", "puredns", "massdns", "crlfuzz", "x8", "ghauri", "paramspider",
+		"notify", "interactsh-client"}
 	res := map[string]bool{}
 	for _, t := range tools {
 		res[t] = rn.Has(t)
@@ -228,6 +236,7 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 		Exposure: req.Options.Exposure, JWT: req.Options.JWT,
 		APIDisco: req.Options.APIDisco, Bypass: req.Options.Bypass, AuthTest: req.Options.AuthTest,
 		Leaks: req.Options.Leaks, Smuggle: req.Options.Smuggle,
+		BruteDNS: req.Options.BruteDNS, Notify: req.Options.Notify,
 		Web: req.Options.Web, SQLi: req.Options.SQLi,
 		WordPress: req.Options.WordPress, TLS: req.Options.TLS,
 		Nikto: req.Options.Nikto, Takeover: req.Options.Takeover,
@@ -832,6 +841,9 @@ func buildConfig(req scanRequest) (*config.Config, *scope.Scope, error) {
 	cfg.Stealth = req.Stealth
 	cfg.Keys.LeakIX = strings.TrimSpace(req.LeakixKey)
 	cfg.Keys.IntelX = strings.TrimSpace(req.IntelxKey)
+	cfg.Notify.TelegramToken = strings.TrimSpace(req.TgToken)
+	cfg.Notify.TelegramChat = strings.TrimSpace(req.TgChat)
+	cfg.Notify.SlackWebhook = strings.TrimSpace(req.SlackHook)
 	if cfg.Stealth {
 		if cfg.RateLimit == 0 {
 			cfg.RateLimit = 10

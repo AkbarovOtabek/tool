@@ -18,6 +18,7 @@ import (
 	"pentkit/internal/exposure"
 	"pentkit/internal/extra"
 	"pentkit/internal/leaks"
+	"pentkit/internal/notify"
 	"pentkit/internal/recon"
 	"pentkit/internal/report"
 	"pentkit/internal/runner"
@@ -44,6 +45,8 @@ type Options struct {
 	AuthTest    bool // активная проверка rate-limit на auth-эндпоинтах (осознанно)
 	Leaks       bool // OSINT по базам утечек LeakIX/IntelX (нужны ключи)
 	Smuggle     bool // HTTP request smuggling (CL.TE/TE.CL) — рискованно, осознанно
+	BruteDNS    bool // активный перебор поддоменов (puredns + massdns)
+	Notify      bool // уведомления о крит/high находках (Telegram/Slack/Discord)
 	Web         bool // ffuf/arjun/dalfox + аудит заголовков
 	SQLi        bool // активные инъекции: sqlmap + nuclei -dast (агрессивно)
 	WordPress   bool // wpscan
@@ -63,7 +66,7 @@ func AllOn() Options {
 	return Options{
 		Cloudflare: true, Crawl: true, Fingerprint: true, OSINT: true,
 		Vuln: true, Secrets: true, Exposure: true, JWT: true, APIDisco: true, Bypass: true,
-		Leaks: true, Web: true, WordPress: true,
+		Leaks: true, Notify: true, Web: true, WordPress: true,
 		TLS: true, Nikto: true, Takeover: true, Screenshots: true,
 		Nmap: true, Exploit: true, MsfCheck: true, Verify: true,
 	}
@@ -84,6 +87,15 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 
 	urls := rec.URLs()
 	hosts := hostnames(rec)
+
+	if opts.BruteDNS {
+		ev.Stage("Брут поддоменов (puredns)")
+		for _, h := range analyze.BruteSubdomains(ctx, cfg, sc, rn, st, ev, st.Dir(), sc.Domains()) {
+			if !contains(hosts, h) {
+				hosts = append(hosts, h)
+			}
+		}
+	}
 
 	if opts.Crawl {
 		ev.Stage("Краулинг и веб-архивы")
@@ -210,9 +222,14 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 		web.Run(ctx, cfg, rn, st, ev, webTargets(rec), opts.SQLi)
 		// Прицельный XSS по всем параметризованным URL-кандидатам (gf xss).
 		web.DalfoxPipe(ctx, rn, st, ev, cand.XSS)
+		// CRLF-инъекции по параметризованным URL (crlfuzz, если установлен).
+		web.CRLFuzz(ctx, rn, st, ev, injectionURLs(cand))
 		if opts.SQLi {
 			// Активный DAST-фаззинг по реальным точкам входа, а не по главным страницам.
 			web.DASTOnURLs(ctx, rn, st, ev, injectionURLs(cand))
+			// x8 — скрытые параметры, ghauri — альтернативный SQLi-движок (если есть).
+			web.X8(ctx, cfg, rn, st, ev, injectionURLs(cand))
+			web.Ghauri(ctx, rn, st, ev, cand.SQLi)
 		}
 	}
 
@@ -222,7 +239,23 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 	}
 
 	ev.Stage("Отчёт")
-	return report.Generate(cfg, st)
+	reportPath, err := report.Generate(cfg, st)
+
+	if opts.Notify {
+		ev.Stage("Уведомления")
+		notify.Run(ctx, cfg, st, ev)
+	}
+	return reportPath, err
+}
+
+// contains сообщает, есть ли s в списке.
+func contains(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }
 
 func hostnames(rec *recon.Result) []string {

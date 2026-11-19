@@ -37,6 +37,16 @@ type Config struct {
 	Keys Keys `yaml:"keys"`
 	// Wordlists — пути к словарям на Kali.
 	Wordlists Wordlists `yaml:"wordlists"`
+	// Notify — куда слать уведомления о крит/high находках.
+	Notify Notify `yaml:"notify"`
+}
+
+// Notify — каналы уведомлений (все опциональны). Пусто = не слать.
+type Notify struct {
+	TelegramToken  string `yaml:"telegram_token"` // токен бота BotFather
+	TelegramChat   string `yaml:"telegram_chat"`  // chat_id (твой id или группы)
+	SlackWebhook   string `yaml:"slack_webhook"`  // Incoming Webhook URL
+	DiscordWebhook string `yaml:"discord_webhook"`
 }
 
 // SOCKS возвращает адрес SOCKS5-прокси (host:port) и флаг, включён ли он.

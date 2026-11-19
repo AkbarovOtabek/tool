@@ -171,6 +171,10 @@ a{color:var(--accent)}
         <label style="margin-top:12px">API-ключи OSINT (опц., для модуля «Утечки»)</label>
         <input type="text" id="leakixKey" placeholder="LeakIX API-ключ (leakix.net)" style="margin-top:2px">
         <input type="text" id="intelxKey" placeholder="IntelX API-ключ (intelx.io)" style="margin-top:6px">
+        <label style="margin-top:12px">Уведомления (опц., для модуля «Уведомления»)</label>
+        <input type="text" id="tgToken" placeholder="Telegram: токен бота (BotFather)" style="margin-top:2px">
+        <input type="text" id="tgChat" placeholder="Telegram: chat_id (твой id или группы)" style="margin-top:6px">
+        <input type="text" id="slackHook" placeholder="Slack Incoming Webhook URL" style="margin-top:6px">
       </div>
 
       <div class="card">
@@ -292,7 +296,9 @@ const MODULES=[
   ["bypass","Обход 401/403","Пробует открыть закрытые страницы: X-Forwarded-For, X-Original-URL, трюки с путём. Без внешних тулов."],
   ["authtest","⚠ Rate-limit входа","Активно: серия ложных логинов — есть ли защита от брутфорса на /login, /reset. Только по согласованию."],
   ["leaks","Утечки (LeakIX/IntelX)","Пассивный OSINT по базам утечек: открытые сервисы, конфиги, слитые данные/пароли. Нужны API-ключи (ниже)."],
+  ["brutedns","Брут поддоменов","Активный перебор поддоменов по словарю (puredns+massdns) — находит то, чего нет в пассивных источниках. Возвращает только живые (резолвятся)."],
   ["smuggle","⚠ Request smuggling","Активно и рискованно: timing-детект CL.TE/TE.CL (рассинхрон фронт/бэкенд). Может задеть хрупкие прокси. Только по согласованию."],
+  ["notify","Уведомления","Шлёт сводку крит/high находок в Telegram/Slack/Discord по завершении. Настрой канал ниже."],
   ["web","Веб-тесты + заголовки","Директории, скрытые параметры, XSS, CORS, security-заголовки (ffuf/ferox/dalfox)."],
   ["sqli","⚠ Активные SQL-инъекции","Боевые инъекции и фаззинг (sqlmap/dast). Агрессивно — только по согласованию."],
   ["wordpress","WordPress","Уязвимые плагины, темы и версии WordPress (wpscan)."],
@@ -305,14 +311,14 @@ const MODULES=[
   ["msfcheck","Metasploit check","Неинтрузивно подтверждает уязвимость, без эксплуатации."],
   ["verify","Перепроверка","Перепроверяет срабатывания nuclei — меньше ложных в отчёте."]
 ];
-const TOOLMAP={cloudflare:null,fingerprint:"whatweb",osint:"theHarvester",crawl:"katana",vuln:"nuclei",secrets:null,exposure:null,jwt:null,apidisco:"kr",bypass:null,authtest:null,leaks:null,smuggle:null,web:"ffuf",sqli:"sqlmap",wordpress:"wpscan",tls:"testssl",nikto:"nikto",takeover:"nuclei",screenshots:"gowitness",nmap:"nmap",exploit:"searchsploit",msfcheck:"msfconsole",verify:"nuclei"};
+const TOOLMAP={cloudflare:null,fingerprint:"whatweb",osint:"theHarvester",crawl:"katana",vuln:"nuclei",secrets:null,exposure:null,jwt:null,apidisco:"kr",bypass:null,authtest:null,leaks:null,brutedns:"puredns",smuggle:null,notify:null,web:"ffuf",sqli:"sqlmap",wordpress:"wpscan",tls:"testssl",nikto:"nikto",takeover:"nuclei",screenshots:"gowitness",nmap:"nmap",exploit:"searchsploit",msfcheck:"msfconsole",verify:"nuclei"};
 const ALLKEYS=MODULES.map(m=>m[0]);
 function setOf(keys){const o={};keys.forEach(k=>o[k]=1);return o}
 // Готовые режимы в один клик.
 const PROFILES=[
   {id:"defend",icon:"🛡️",name:"Защита моего сайта",tag:"safe",tagt:"безопасно",
    desc:"Полная проверка своего сайта без разрушительных действий: открытые файлы, утечки, JWT, обход доступа, OSINT-утечки, уязвимости, TLS, заголовки.",
-   mods:setOf(["cloudflare","fingerprint","crawl","vuln","secrets","exposure","jwt","bypass","leaks","web","tls","nikto","takeover","screenshots","verify"])},
+   mods:setOf(["cloudflare","fingerprint","crawl","vuln","secrets","exposure","jwt","bypass","leaks","notify","web","tls","nikto","takeover","screenshots","verify"])},
   {id:"recon",icon:"🐇",name:"Быстрая разведка",tag:"safe",tagt:"тихо",
    desc:"Только тихий сбор поверхности: поддомены, технологии, почты, открытые файлы.",
    mods:setOf(["cloudflare","fingerprint","osint","crawl","exposure"])},
@@ -409,6 +415,7 @@ function collect(){
     tor:el("tor").checked,stealth:el("stealth").checked,passive:el("passive").checked,proxy:el("proxy").value,
     install:el("install").checked,
     leakix_key:el("leakixKey").value,intelx_key:el("intelxKey").value,
+    tg_token:el("tgToken").value,tg_chat:el("tgChat").value,slack_hook:el("slackHook").value,
     options:o};
 }
 
