@@ -579,3 +579,27 @@ func Oralyzer(ctx context.Context, rn *runner.Runner, st *store.Store, ev event.
 		}
 	}
 }
+
+// Commix проверяет command injection по URL-кандидатам (gf rce). Активно и
+// интрузивно — вызывается только в SQLi/агрессивном режиме.
+func Commix(ctx context.Context, rn *runner.Runner, st *store.Store, ev event.Sink, urls []string) {
+	if !rn.Has("commix") || len(urls) == 0 {
+		return
+	}
+	if len(urls) > 10 {
+		urls = urls[:10]
+	}
+	ev.Logf("  commix: проверяю %d URL на command injection...\n", len(urls))
+	for _, u := range urls {
+		r := rn.Run(ctx, "commix", "--url", u, "--batch", "--level", "1")
+		for _, line := range r.Lines {
+			low := strings.ToLower(line)
+			if strings.Contains(low, "injectable") || strings.Contains(low, "vulnerable to") {
+				st.Add(store.Finding{Target: u, Type: store.TypeInjection, Severity: store.SevHigh,
+					Title: "Command injection (commix)", Evidence: trimLine(strings.TrimSpace(line), 300),
+					Tool: "commix", Tags: []string{"command-injection", "requires-review"}})
+				break
+			}
+		}
+	}
+}

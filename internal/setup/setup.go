@@ -80,6 +80,11 @@ var registry = []tool{
 	{"findomain", []step{{kindApt, "findomain"}}},
 	{"feroxbuster", []step{{kindApt, "feroxbuster"}}},
 	{"massdns", []step{{kindApt, "massdns"}}},
+	{"gobuster", []step{{kindApt, "gobuster"}, {kindGo, "github.com/OJ/gobuster/v3@latest"}}},
+	{"hydra", []step{{kindApt, "hydra"}}},     // онлайн-брут логинов (Password Attacks)
+	{"john", []step{{kindApt, "john"}}},       // офлайн-крекинг хэшей
+	{"hashcat", []step{{kindApt, "hashcat"}}}, // офлайн-крекинг хэшей (GPU)
+	{"commix", []step{{kindApt, "commix"}, {kindPipx, "git+https://github.com/commixproject/commix"}}},
 	{"searchsploit", []step{{kindApt, "exploitdb"}}},
 	{"msfconsole", []step{{kindApt, "metasploit-framework"}}},
 	{"testssl.sh", []step{{kindApt, "testssl.sh"}}},
