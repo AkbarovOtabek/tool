@@ -142,7 +142,8 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 		ev.Logln("  ! dnsx не установлен — пропускаю резолв")
 	}
 
-	// 3. Порты (naabu).
+	// 3. Порты (naabu). Копим порты по хостам — пригодятся для оценки живости.
+	portsByHost := map[string][]int{}
 	switch {
 	case rn.Passive:
 		ev.Logln("  пассивный режим: пропускаю скан портов (naabu) — слишком шумно для WAF/Firewall")
@@ -171,6 +172,9 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 			target := p.Host
 			if target == "" {
 				target = p.IP
+			}
+			if p.Host != "" {
+				portsByHost[hostOnly(p.Host)] = append(portsByHost[hostOnly(p.Host)], p.Port)
 			}
 			st.Add(store.Finding{Target: target, Type: store.TypePort, Severity: store.SevInfo,
 				Title: "Открыт порт " + itoa(p.Port), Detail: p.IP, Tool: "naabu"})
@@ -225,7 +229,10 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 	cdnCheck(ctx, rn, st, ev, res)
 
 	// 6. Живость поддоменов: пишем находку по каждому с явным статусом.
-	emitSubdomains(ctx, rn, st, ev, res, httpByHost)
+	if rn.SOCKS != "" {
+		ev.Logln("  ⚠ трафик через Tor/SOCKS: определение живости и портов может быть ЗАНИЖЕНО (exit-ноды режут не-web порты, высокая задержка)")
+	}
+	emitSubdomains(ctx, rn, st, ev, res, httpByHost, portsByHost)
 
 	return res, nil
 }
@@ -274,7 +281,7 @@ func cdnCheck(ctx context.Context, rn *runner.Runner, st *store.Store, ev event.
 // emitSubdomains добавляет находку по каждому поддомену с явным признаком
 // живости: отвечает по HTTP / открыт TCP-порт / только резолвится / мёртвый.
 // Для хостов без HTTP-ответа делает лёгкую TCP-пробу 443 и 80 («пинг»).
-func emitSubdomains(ctx context.Context, rn *runner.Runner, st *store.Store, ev event.Sink, res *Result, httpByHost map[string]HTTPService) {
+func emitSubdomains(ctx context.Context, rn *runner.Runner, st *store.Store, ev event.Sink, res *Result, httpByHost map[string]HTTPService, portsByHost map[string][]int) {
 	var live, resolvesOnly, dead int
 	// TCP-пробы распараллелим: это независимые короткие соединения.
 	type probeRes struct {
@@ -288,6 +295,9 @@ func emitSubdomains(ctx context.Context, rn *runner.Runner, st *store.Store, ev 
 	for _, h := range res.Subdomains {
 		if _, ok := httpByHost[h]; ok {
 			continue // уже знаем, что жив по HTTP
+		}
+		if len(portsByHost[h]) > 0 {
+			continue // naabu уже нашёл открытые порты — TCP-проба не нужна
 		}
 		if rn.Passive {
 			continue // активная TCP-проба запрещена в пассивном режиме
@@ -325,6 +335,14 @@ func emitSubdomains(ctx context.Context, rn *runner.Runner, st *store.Store, ev 
 			}
 			tags = []string{"live", "http"}
 			live++
+		} else if ports := portsByHost[h]; len(ports) > 0 {
+			status = "жив (порты)"
+			detail = "открыты порты: " + joinPorts(ports)
+			if ip := res.Resolved[h]; ip != "" {
+				detail += " · " + ip
+			}
+			tags = []string{"live", "ports"}
+			live++
 		} else if port, ok := tcpOpen[h]; ok {
 			status = "жив (TCP)"
 			detail = "порт " + port + " открыт"
@@ -336,7 +354,12 @@ func emitSubdomains(ctx context.Context, rn *runner.Runner, st *store.Store, ev 
 			live++
 		} else if ip, ok := res.Resolved[h]; ok {
 			status = "не отвечает"
-			detail = "резолвится в " + ip + ", но HTTP/443/80 закрыты"
+			detail = "резолвится в " + ip + ", но пробы портов не ответили"
+			if rn.SOCKS != "" {
+				detail += " (через Tor/SOCKS — возможно ложно; перепроверь напрямую nmap)"
+			} else {
+				detail += " (HTTP/443/80/8443/8080/22 закрыты/фильтруются)"
+			}
 			tags = []string{"resolves", "no-response"}
 			resolvesOnly++
 		} else {
@@ -354,7 +377,7 @@ func emitSubdomains(ctx context.Context, rn *runner.Runner, st *store.Store, ev 
 // tcpAlive пробует подключиться к 443 и 80 (с учётом Tor/SOCKS). Возвращает
 // открытый порт или "". Это лёгкая «пинг»-проверка живости без внешних тулов.
 func tcpAlive(ctx context.Context, rn *runner.Runner, host string) string {
-	for _, port := range []string{"443", "80"} {
+	for _, port := range []string{"443", "80", "8443", "8080", "22"} {
 		cctx, cancel := context.WithTimeout(ctx, 4*time.Second)
 		var conn net.Conn
 		var err error
@@ -371,6 +394,28 @@ func tcpAlive(ctx context.Context, rn *runner.Runner, host string) string {
 		}
 	}
 	return ""
+}
+
+// joinPorts печатает список портов через запятую (до 8), с «…» при переполнении.
+func joinPorts(ports []int) string {
+	sort.Ints(ports)
+	seen := map[int]bool{}
+	var uniq []int
+	for _, p := range ports {
+		if !seen[p] {
+			seen[p] = true
+			uniq = append(uniq, p)
+		}
+	}
+	var parts []string
+	for i, p := range uniq {
+		if i >= 8 {
+			parts = append(parts, "…")
+			break
+		}
+		parts = append(parts, itoa(p))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // hostOnly убирает порт из "host:port".
