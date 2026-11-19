@@ -10,9 +10,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -48,6 +50,7 @@ type job struct {
 	sink       *event.Buffered
 	st         *store.Store
 	cfg        *config.Config
+	sc         *scope.Scope // для scope-проверки целей на вкладке «Эксплуатация»
 	reportPath string
 	cancel     context.CancelFunc
 	done       bool
@@ -102,6 +105,12 @@ func Serve(addr string) error {
 	mux.HandleFunc("/api/findings", s.auth(s.handleFindings))
 	mux.HandleFunc("/api/stop", s.auth(s.handleStop))
 	mux.HandleFunc("/api/report", s.auth(s.handleReport))
+
+	// Эксплуатация (кокпит): подтверждение (msf check), поиск эксплойтов,
+	// готовый .rc. Сам боевой exploit/run не запускается из веба — только check.
+	mux.HandleFunc("/api/exploit/info", s.auth(s.handleExploitInfo))
+	mux.HandleFunc("/api/exploit/searchsploit", s.auth(s.handleSearchsploit))
+	mux.HandleFunc("/api/exploit/check", s.auth(s.handleMsfCheck))
 
 	// Прокси (Burp-режим): перехват, история, Intercept, Repeater.
 	mux.HandleFunc("/proxy", s.handleProxyPage)
@@ -192,7 +201,7 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 
 	sink := event.NewBuffered()
 	ctx, cancel := context.WithCancel(context.Background())
-	j := &job{sink: sink, st: st, cfg: cfg, cancel: cancel}
+	j := &job{sink: sink, st: st, cfg: cfg, sc: sc, cancel: cancel}
 	s.mu.Lock()
 	s.job = j
 	s.mu.Unlock()
@@ -326,6 +335,109 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(data)
+}
+
+// --- Эксплуатация (кокпит) ---
+
+// moduleRe/targetRe — защита от инъекции в аргументы msfconsole.
+var moduleRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9/_.\-]*$`)
+var targetRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9.\-:]*$`)
+
+func (s *Server) curJob() *job { s.mu.Lock(); defer s.mu.Unlock(); return s.job }
+
+// handleExploitInfo — наличие тулов + содержимое готового metasploit.rc текущей работы.
+func (s *Server) handleExploitInfo(w http.ResponseWriter, r *http.Request) {
+	rn := runner.New(time.Minute, false)
+	info := map[string]any{
+		"hasMsf":          rn.Has("msfconsole"),
+		"hasSearchsploit": rn.Has("searchsploit"),
+	}
+	if j := s.curJob(); j != nil {
+		rc := filepath.Join(j.st.Dir(), "metasploit.rc")
+		info["rcPath"] = rc
+		info["engagement"] = j.cfg.Engagement.Name
+		if b, err := os.ReadFile(rc); err == nil {
+			info["rcContent"] = string(b)
+		}
+	}
+	writeJSON(w, info)
+}
+
+// handleSearchsploit — поиск публичных эксплойтов по ключевому слову (read-only).
+func (s *Server) handleSearchsploit(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Q string `json:"q"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	req.Q = strings.TrimSpace(req.Q)
+	if req.Q == "" {
+		http.Error(w, "пустой запрос", http.StatusBadRequest)
+		return
+	}
+	rn := runner.New(2*time.Minute, false)
+	if !rn.Has("searchsploit") {
+		http.Error(w, "searchsploit не установлен (apt install exploitdb)", http.StatusBadRequest)
+		return
+	}
+	res := rn.Run(r.Context(), "searchsploit", "--json", req.Q)
+	var parsed struct {
+		Results []map[string]any `json:"RESULTS_EXPLOIT"`
+	}
+	_ = json.Unmarshal([]byte(res.Stdout), &parsed)
+	out := make([]map[string]string, 0, len(parsed.Results))
+	for _, m := range parsed.Results {
+		out = append(out, map[string]string{
+			"title": fmt.Sprintf("%v", m["Title"]),
+			"id":    fmt.Sprintf("%v", m["EDB-ID"]),
+			"path":  fmt.Sprintf("%v", m["Path"]),
+			"date":  fmt.Sprintf("%v", m["Date_Published"]),
+		})
+	}
+	writeJSON(w, out)
+}
+
+// handleMsfCheck — НЕИНТРУЗИВНАЯ проверка модулем Metasploit (`check`, без `run`).
+// Цель обязана быть в scope текущей работы — иначе отказ.
+func (s *Server) handleMsfCheck(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Module string `json:"module"`
+		Target string `json:"target"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	module := strings.TrimSpace(req.Module)
+	target := strings.TrimSpace(req.Target)
+	if !moduleRe.MatchString(module) {
+		http.Error(w, "неверное имя модуля (разрешено: буквы/цифры/ / _ . -)", http.StatusBadRequest)
+		return
+	}
+	if !targetRe.MatchString(target) {
+		http.Error(w, "неверная цель", http.StatusBadRequest)
+		return
+	}
+	j := s.curJob()
+	if j == nil {
+		http.Error(w, "сначала запусти скан — нужен scope цели", http.StatusBadRequest)
+		return
+	}
+	host := target
+	if h, _, err := net.SplitHostPort(target); err == nil {
+		host = h
+	}
+	if !j.sc.InScope(host) {
+		http.Error(w, "цель вне scope — отклонено (это защита от выхода за рамки разрешения)", http.StatusForbidden)
+		return
+	}
+	rn := runner.New(3*time.Minute, false)
+	if !rn.Has("msfconsole") {
+		http.Error(w, "msfconsole не установлен (apt install metasploit-framework)", http.StatusBadRequest)
+		return
+	}
+	x := "use " + module + "; set RHOSTS " + target + "; check; exit"
+	res := rn.Run(r.Context(), "msfconsole", "-q", "-x", x)
+	writeJSON(w, map[string]any{
+		"cmd":    "msfconsole -q -x \"" + x + "\"",
+		"output": strings.TrimSpace(res.Stdout + "\n" + res.Stderr),
+	})
 }
 
 // --- Прокси (Burp-режим) ---

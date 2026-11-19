@@ -96,6 +96,7 @@ a{color:var(--accent)}
 
   <div class="tabs">
     <button class="tab active" data-tab="scan">🔎 Сканер</button>
+    <button class="tab" data-tab="exploit">🧨 Эксплуатация</button>
     <button class="tab" data-tab="proxy">🔀 Прокси (Burp-режим)</button>
   </div>
 
@@ -144,6 +145,63 @@ a{color:var(--accent)}
       </div>
       <table><thead><tr><th>Важность</th><th>Тип</th><th>Находка</th><th>Цель</th><th>Тул</th></tr></thead>
       <tbody id="ftbody"></tbody></table>
+    </div>
+  </div>
+
+  <!-- ===== ВКЛАДКА: ЭКСПЛУАТАЦИЯ ===== -->
+  <div class="page" id="page-exploit">
+    <div class="warn">🧨 Подтверждение уязвимости (<b>msf check</b>), поиск эксплойтов и сборка команд — здесь. Сам боевой <code>exploit</code>/<code>run</code> и интерактивную сессию запускай в <code>msfconsole</code> (кнопка «копировать» даёт готовую команду) — это защита прод-систем клиента от случайного выстрела из браузера.</div>
+    <div class="grid">
+      <div class="card">
+        <h2>1 · Поиск эксплойтов (searchsploit)</h2>
+        <label>Продукт / версия / CVE</label>
+        <div class="row" style="margin-top:0">
+          <input type="text" id="ssq" placeholder="например: apache 2.4.49 или CVE-2021-41773" style="flex:1">
+          <button class="act" id="ssbtn">Искать</button>
+        </div>
+        <div id="ssbadge" class="hint"></div>
+        <div style="max-height:300px;overflow:auto;margin-top:8px">
+          <table><thead><tr><th>Эксплойт</th><th>EDB-ID</th><th></th></tr></thead>
+          <tbody id="ssbody"><tr><td colspan="3" style="color:var(--mut)">введи запрос и нажми «Искать»</td></tr></tbody></table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>2 · Сборка команды Metasploit</h2>
+        <label>Модуль (из searchsploit/отчёта)</label>
+        <input type="text" id="exmod" placeholder="exploit/multi/http/apache_normalize_path_rce">
+        <div class="row" style="margin-top:0;gap:10px">
+          <div style="flex:1"><label>RHOSTS (цель, в scope)</label><input type="text" id="exrhost" placeholder="10.0.0.5 или host:port"></div>
+          <div style="flex:1"><label>LHOST (твой IP у клиента)</label><input type="text" id="exlhost" placeholder="10.0.0.99"></div>
+        </div>
+        <div class="row" style="margin-top:0;gap:10px">
+          <div style="width:120px"><label>LPORT</label><input type="text" id="exlport" value="4444"></div>
+          <div style="flex:1"><label>PAYLOAD</label>
+            <select id="expayload" style="width:100%;background:var(--card2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px 10px;font:13px inherit">
+              <option value="">— по умолчанию модуля —</option>
+              <option>linux/x64/meterpreter/reverse_tcp</option>
+              <option>windows/x64/meterpreter/reverse_tcp</option>
+              <option>php/meterpreter/reverse_tcp</option>
+              <option>java/jsp_shell_reverse_tcp</option>
+              <option>cmd/unix/reverse_bash</option>
+            </select>
+          </div>
+        </div>
+        <label style="margin-top:10px">Готовая команда (скопируй в msfconsole)</label>
+        <div class="log" id="excmd" style="height:auto;min-height:72px"></div>
+        <div class="row">
+          <button class="ghost" id="excopy">⧉ Копировать</button>
+          <button class="act" id="excheck">▶ Запустить check (неинтрузивно)</button>
+        </div>
+        <div class="hint">check только проверяет уязвимость, не эксплуатирует. Цель проверяется по scope — вне scope будет отказ.</div>
+        <div class="log" id="exout" style="height:200px;margin-top:8px;display:none"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="fhead"><h2 style="margin:0">3 · Готовый metasploit.rc</h2><span class="spacer"></span><button class="ghost" id="exrccopy">⧉ Копировать запуск</button></div>
+      <div class="hint" id="exrcpath">запусти скан с модулями nmap/exploit — pentkit сформирует .rc с импортом хостов.</div>
+      <div class="log" id="exrc" style="height:180px;margin-top:8px"></div>
     </div>
   </div>
 
@@ -198,6 +256,50 @@ function showTab(name){
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===name));
   document.querySelectorAll(".page").forEach(p=>p.classList.toggle("active",p.id==="page-"+name));
   if(name==="proxy" && !el("pxframe").src) el("pxframe").src="/proxy?t="+TOKEN; // ленивая загрузка
+  if(name==="exploit") loadExploitInfo();
+}
+
+/* ---- эксплуатация ---- */
+function copyText(t){navigator.clipboard&&navigator.clipboard.writeText(t)}
+async function loadExploitInfo(){
+  let i;try{i=await(await fetch("/api/exploit/info",{headers:H})).json()}catch(e){return}
+  el("ssbadge").innerHTML=i.hasSearchsploit?'':'<span style="color:#f3a6a6">searchsploit не установлен (apt install exploitdb)</span>';
+  if(i.rcContent){el("exrc").textContent=i.rcContent;el("exrcpath").textContent="Файл: "+i.rcPath;}
+  else if(i.rcPath){el("exrcpath").textContent="Пока нет: "+i.rcPath+" — появится после скана с nmap/exploit.";}
+  el("exrc").dataset.rc=i.rcPath||"";
+  buildMsfCmd();
+}
+async function doSearchsploit(){
+  const q=el("ssq").value.trim();if(!q)return;
+  el("ssbody").innerHTML='<tr><td colspan="3"><span class="spin"></span> ищу...</td></tr>';
+  let res;try{const r=await fetch("/api/exploit/searchsploit",{method:"POST",headers:H,body:JSON.stringify({q})});
+    if(!r.ok){el("ssbody").innerHTML='<tr><td colspan="3" style="color:#f3a6a6">'+esc(await r.text())+'</td></tr>';return}
+    res=await r.json()}catch(e){return}
+  res=res||[];
+  if(!res.length){el("ssbody").innerHTML='<tr><td colspan="3" style="color:var(--mut)">ничего не найдено</td></tr>';return}
+  el("ssbody").innerHTML=res.map(x=>
+    `<tr><td>${esc(x.title)}</td><td class="tgt">${esc(x.id)}</td>`+
+    `<td><button class="ghost" style="padding:3px 8px;font-size:12px" onclick="copyText('searchsploit -m ${esc(x.path)}')">⧉ -m</button></td></tr>`).join("");
+}
+function buildMsfCmd(){
+  const mod=el("exmod").value.trim(),rh=el("exrhost").value.trim(),lh=el("exlhost").value.trim(),
+    lp=el("exlport").value.trim(),pl=el("expayload").value;
+  const L=["msfconsole -q"];const x=[];
+  if(mod)x.push("use "+mod);
+  if(rh)x.push("set RHOSTS "+rh);
+  if(pl){x.push("set PAYLOAD "+pl);if(lh)x.push("set LHOST "+lh);if(lp)x.push("set LPORT "+lp);}
+  x.push("check   # сначала подтвердить");
+  x.push("# run   # боевой запуск — только по согласованию с клиентом");
+  el("excmd").textContent=x.length?x.join("\n"):"заполни модуль и цель";
+}
+async function doMsfCheck(){
+  const module=el("exmod").value.trim(),target=el("exrhost").value.trim();
+  if(!module||!target){alert("Укажи модуль и RHOSTS");return}
+  const out=el("exout");out.style.display="block";out.textContent="⏳ msf check "+target+" ...";
+  try{const r=await fetch("/api/exploit/check",{method:"POST",headers:H,body:JSON.stringify({module,target})});
+    if(!r.ok){out.textContent="✖ "+await r.text();return}
+    const d=await r.json();out.textContent="$ "+d.cmd+"\n\n"+(d.output||"(пустой вывод)");
+  }catch(e){out.textContent="ошибка: "+e.message}
 }
 
 /* ---- модули ---- */
@@ -277,6 +379,14 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>showTab(b.dataset.tab
 el("start").onclick=start;
 el("stop").onclick=stop;
 el("report").onclick=()=>window.open("/api/report?t="+TOKEN,"_blank");
+// эксплуатация
+el("ssbtn").onclick=doSearchsploit;
+el("ssq").addEventListener("keydown",e=>{if(e.key==="Enter")doSearchsploit()});
+["exmod","exrhost","exlhost","exlport"].forEach(id=>el(id).addEventListener("input",buildMsfCmd));
+el("expayload").addEventListener("change",buildMsfCmd);
+el("excopy").onclick=()=>copyText(el("excmd").textContent);
+el("excheck").onclick=doMsfCheck;
+el("exrccopy").onclick=()=>{const p=el("exrc").dataset.rc;if(p)copyText("msfconsole -q -r "+p)};
 loadTools();tick();
 </script>
 </body>
