@@ -7,48 +7,67 @@
 <style>
 :root{
   --bg:#0b1220;--card:#131c2e;--card2:#0f1726;--fg:#e6edf6;--mut:#8aa0bd;--line:#223049;
-  --accent:#3b82f6;--accent-fg:#fff;--ok:#22c55e;--warn-bg:#3a2a08;--warn-bd:#6b4e12;--warn-fg:#f5d58a;
-  --term-bg:#060b14;--term-fg:#b9c7dc;--tab-bg:#0f1726;--shadow:0 1px 3px rgba(0,0,0,.4);
+  --accent:#3b82f6;--accent-fg:#fff;--accent-soft:#16233c;--ok:#22c55e;
+  --warn-bg:#3a2a08;--warn-bd:#6b4e12;--warn-fg:#f5d58a;
+  --term-bg:#060b14;--term-fg:#b9c7dc;--shadow:0 1px 3px rgba(0,0,0,.4);
   --badge-on-bg:#0f3d24;--badge-on-fg:#6ee7a0;--badge-off-bg:#3d1f1f;--badge-off-fg:#f3a6a6;
+  --sev-crit:#dc2626;--sev-high:#ef4444;--sev-med:#f59e0b;--sev-low:#3b82f6;--sev-info:#64748b;
 }
 html[data-theme=light]{
   --bg:#eef2f8;--card:#ffffff;--card2:#f4f7fb;--fg:#1b2435;--mut:#5c6b84;--line:#dce3ee;
-  --accent:#2563eb;--accent-fg:#fff;--ok:#16a34a;--warn-bg:#fdf6e3;--warn-bd:#e7d4a1;--warn-fg:#8a6d1a;
-  --term-bg:#0b1220;--term-fg:#c7d4e8;--tab-bg:#e5ebf4;--shadow:0 1px 3px rgba(20,40,80,.08);
+  --accent:#2563eb;--accent-fg:#fff;--accent-soft:#e8f0fe;--ok:#16a34a;
+  --warn-bg:#fdf6e3;--warn-bd:#e7d4a1;--warn-fg:#8a6d1a;
+  --term-bg:#0b1220;--term-fg:#c7d4e8;--shadow:0 1px 3px rgba(20,40,80,.08);
   --badge-on-bg:#dcfce7;--badge-on-fg:#166534;--badge-off-bg:#fee2e2;--badge-off-fg:#b91c1c;
+  --sev-crit:#b91c1c;--sev-high:#dc2626;--sev-med:#b45309;--sev-low:#2563eb;--sev-info:#475569;
 }
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 system-ui,Segoe UI,Roboto,sans-serif}
-.wrap{max-width:1180px;margin:0 auto;padding:18px 16px 60px}
-/* header */
-.top{display:flex;align-items:center;gap:12px;margin-bottom:6px}
-h1{font-size:20px;margin:0;display:flex;align-items:center;gap:9px}
-.sub{color:var(--mut);font-size:13px;margin-bottom:14px;max-width:820px}
+.wrap{max-width:1200px;margin:0 auto;padding:18px 16px 72px}
+.top{display:flex;align-items:center;gap:12px;margin-bottom:4px}
+h1{font-size:21px;margin:0;display:flex;align-items:center;gap:9px}
+.sub{color:var(--mut);font-size:13px;margin-bottom:16px;max-width:860px}
 .spacer{flex:1}
 .theme-btn{background:var(--card);border:1px solid var(--line);color:var(--fg);border-radius:8px;
   padding:7px 12px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px}
 .theme-btn:hover{border-color:var(--accent)}
-/* tabs */
-.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px}
 .tab{background:transparent;border:0;border-bottom:2px solid transparent;color:var(--mut);
   padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:-1px}
 .tab:hover{color:var(--fg)}
 .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
 .page{display:none}.page.active{display:block}
-/* cards + form */
 .warn{background:var(--warn-bg);border:1px solid var(--warn-bd);color:var(--warn-fg);border-radius:8px;padding:9px 13px;font-size:13px;margin-bottom:16px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-@media(max-width:820px){.grid{grid-template-columns:1fr}}
+@media(max-width:860px){.grid{grid-template-columns:1fr}}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
-.card h2{font-size:13px;margin:0 0 12px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut)}
+.card h2{font-size:12px;margin:0 0 12px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut);font-weight:700}
 label{display:block;font-size:12px;color:var(--mut);margin:10px 0 4px}
-input[type=text],input[type=number],textarea,#proxy{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px 10px;font:13px/1.4 inherit}
-input:focus,textarea:focus{outline:0;border-color:var(--accent)}
-textarea{resize:vertical;min-height:60px;font-family:ui-monospace,monospace}
+input[type=text],input[type=number],textarea,select,#proxy{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px 10px;font:13px/1.4 inherit}
+input:focus,textarea:focus,select:focus{outline:0;border-color:var(--accent)}
+textarea{resize:vertical;min-height:58px;font-family:ui-monospace,monospace}
 .req label::after{content:" *";color:#ef4444}
-/* modules list — каждый пункт с описанием «что делает» */
-.mods{display:flex;flex-direction:column;gap:2px;margin-top:4px}
-.mod{display:flex;gap:10px;padding:8px;border-radius:9px;cursor:pointer;align-items:flex-start}
+
+/* ---- пресеты (один клик) ---- */
+.profiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:10px;margin-bottom:16px}
+.profile{text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 13px;cursor:pointer;transition:.12s;box-shadow:var(--shadow)}
+.profile:hover{border-color:var(--accent);transform:translateY(-1px)}
+.profile.sel{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 1px var(--accent)}
+.profile .pi{font-size:20px;line-height:1}
+.profile .pn{font-weight:700;font-size:14px;margin:6px 0 3px;display:flex;align-items:center;gap:6px}
+.profile .pd{font-size:11.5px;color:var(--mut);line-height:1.4}
+.profile .ptag{font-size:9.5px;font-weight:800;letter-spacing:.4px;padding:1px 6px;border-radius:999px;text-transform:uppercase}
+.ptag.safe{background:var(--badge-on-bg);color:var(--badge-on-fg)}
+.ptag.hot{background:var(--badge-off-bg);color:var(--badge-off-fg)}
+
+/* ---- модули ---- */
+details.modbox{margin-top:4px}
+details.modbox>summary{cursor:pointer;font-size:12px;color:var(--mut);font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:4px 0;list-style:none}
+details.modbox>summary::-webkit-details-marker{display:none}
+details.modbox>summary::before{content:"▸ ";color:var(--accent)}
+details.modbox[open]>summary::before{content:"▾ "}
+.mods{display:flex;flex-direction:column;gap:2px;margin-top:8px}
+.mod{display:flex;gap:10px;padding:7px 8px;border-radius:9px;cursor:pointer;align-items:flex-start}
 .mod:hover{background:var(--card2)}
 .mod input{width:16px;height:16px;margin-top:2px;flex-shrink:0;accent-color:var(--accent)}
 .mod .body{flex:1;min-width:0}
@@ -60,28 +79,51 @@ textarea{resize:vertical;min-height:60px;font-family:ui-monospace,monospace}
 .stealth{display:flex;flex-direction:column;gap:2px;margin-top:4px}
 .hint{color:var(--mut);font-size:12px;margin-top:8px}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px}
-button.act{background:var(--accent);color:var(--accent-fg);border:0;border-radius:8px;padding:9px 18px;font-size:14px;font-weight:600;cursor:pointer}
+button.act{background:var(--accent);color:var(--accent-fg);border:0;border-radius:8px;padding:10px 20px;font-size:14px;font-weight:700;cursor:pointer}
+button.act:hover{filter:brightness(1.08)}
 button.ghost{background:transparent;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer}
+button.ghost:hover{border-color:var(--accent)}
 button.danger{background:#b91c1c;color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:700;cursor:pointer}
 button.danger:hover{background:#991b1b}
 button:disabled{opacity:.5;cursor:not-allowed}
-.chips{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
-.chip{padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;color:#fff}
-.stage{font-size:13px;color:var(--mut)}
-.log{background:var(--term-bg);border:1px solid var(--line);border-radius:8px;padding:10px;height:260px;overflow:auto;font:12px/1.5 ui-monospace,monospace;color:var(--term-fg);white-space:pre-wrap}
-/* findings */
-.fhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
-.filters{display:flex;gap:6px;flex-wrap:wrap}
-.filters button{padding:4px 11px;font-size:12px;font-weight:600;background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:999px;cursor:pointer}
-.filters button.sel{color:var(--accent);border-color:var(--accent)}
+.stage{font-size:13px;color:var(--mut);display:flex;align-items:center;gap:7px}
+.log{background:var(--term-bg);border:1px solid var(--line);border-radius:8px;padding:10px;height:230px;overflow:auto;font:12px/1.5 ui-monospace,monospace;color:var(--term-fg);white-space:pre-wrap}
+
+/* ---- статистика находок (плитки-фильтры) ---- */
+.statrow{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:14px}
+@media(max-width:700px){.statrow{grid-template-columns:repeat(3,1fr)}}
+.stat{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;transition:.12s;border-left-width:3px}
+.stat:hover{border-color:var(--accent)}
+.stat.sel{background:var(--accent-soft);box-shadow:0 0 0 1px var(--accent)}
+.stat .num{font-size:22px;font-weight:800;line-height:1}
+.stat .lbl{font-size:11px;color:var(--mut);margin-top:3px;font-weight:600}
+
+/* ---- таблица находок ---- */
+.fhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+#fsearch{max-width:260px;padding:7px 10px}
 table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
 th{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.3px}
-td.tgt{font-family:ui-monospace,monospace;font-size:12px;color:var(--mut);word-break:break-all;max-width:340px}
-.sev{font-weight:700;font-size:11px;padding:2px 8px;border-radius:5px;color:#fff;white-space:nowrap}
+tr.frow{cursor:pointer}
+tr.frow:hover>td{background:var(--card2)}
+tr.frow>td:first-child{border-left:3px solid transparent}
+td.tgt{font-family:ui-monospace,monospace;font-size:12px;color:var(--mut);word-break:break-all;max-width:320px}
+td.tgt a{color:var(--accent);text-decoration:none}
+td.tgt a:hover{text-decoration:underline}
+.sev{font-weight:800;font-size:10.5px;padding:3px 8px;border-radius:5px;color:#fff;white-space:nowrap;letter-spacing:.3px}
+.tpill{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:999px;background:var(--card2);border:1px solid var(--line);color:var(--mut);white-space:nowrap}
+.tags{color:var(--mut);font-size:11px;margin-top:3px}
+.caret{color:var(--mut);font-size:11px;transition:.12s;display:inline-block}
+tr.open .caret{transform:rotate(90deg)}
+tr.detail>td{background:var(--card2);padding:0}
+tr.detail .inner{padding:12px 14px;display:none}
+tr.detail.show .inner{display:block}
+.kv{margin:0 0 7px}.kv .k{font-size:10.5px;text-transform:uppercase;letter-spacing:.4px;color:var(--mut);font-weight:700;margin-bottom:2px}
+.kv .v{font-size:13px}
+.kv .mono{font-family:ui-monospace,monospace;font-size:12px;background:var(--term-bg);color:var(--term-fg);border-radius:6px;padding:8px 10px;white-space:pre-wrap;word-break:break-all;border:1px solid var(--line)}
+.empty{color:var(--mut);padding:22px 8px;text-align:center}
 .spin{width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;display:inline-block;animation:sp 1s linear infinite;vertical-align:middle}
 @keyframes sp{to{transform:rotate(360deg)}}
-/* proxy tab */
 .pxbar{display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--mut);font-size:13px}
 #pxframe{width:100%;height:calc(100vh - 150px);min-height:560px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
 a{color:var(--accent)}
@@ -94,7 +136,7 @@ a{color:var(--accent)}
     <span class="spacer"></span>
     <button class="theme-btn" id="themeBtn" title="Светлая / тёмная тема">🌙 <span id="themeLbl">Тёмная</span></button>
   </div>
-  <div class="sub">Оркестратор авторизованного пентеста — recon, поиск origin за Cloudflare, уязвимости, веб-тесты, утечки секретов и отчёт в одном окне.</div>
+  <div class="sub">Оркестратор авторизованного пентеста — recon, origin за Cloudflare, уязвимости, веб-тесты, утечки и отчёт в одном окне. Выбери готовый режим в один клик.</div>
 
   <div class="tabs">
     <button class="tab active" data-tab="scan">🔎 Сканер</button>
@@ -105,6 +147,10 @@ a{color:var(--accent)}
   <!-- ===== ВКЛАДКА: СКАНЕР ===== -->
   <div class="page active" id="page-scan">
     <div class="warn">⚠️ Запускай только против систем, на тест которых у тебя есть письменное разрешение. Поле «Авторизация» обязательно и попадает в отчёт.</div>
+
+    <h2 style="font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--mut);margin:0 0 10px;font-weight:700">Режим в один клик</h2>
+    <div class="profiles" id="profiles"></div>
+
     <div class="grid">
       <div class="card">
         <h2>Параметры работы</h2>
@@ -117,42 +163,46 @@ a{color:var(--accent)}
         <label>Параллелизм</label><input type="number" id="conc" value="10" min="1" max="50" style="width:90px">
         <label style="margin-top:12px">Скрытность (против WAF/Firewall и блок-листов)</label>
         <div class="stealth">
-          <label class="mod"><input type="checkbox" id="tor"><span class="body"><span class="name">🔒 Весь трафик через Tor</span><span class="desc">Прячет твой IP через SOCKS5 9050 + proxychains4. Нужен сервис <code>tor</code>. На заказном тесте обычно НЕ нужен — клиент ждёт известный IP.</span></span></label>
+          <label class="mod"><input type="checkbox" id="tor"><span class="body"><span class="name">🔒 Весь трафик через Tor</span><span class="desc">Прячет твой IP через SOCKS5 9050 + proxychains4. Нужен сервис <code>tor</code>. На заказном тесте обычно НЕ нужен.</span></span></label>
           <label class="mod"><input type="checkbox" id="stealth"><span class="body"><span class="name">🐢 Stealth</span><span class="desc">Низкий rate/параллелизм, джиттер, ротация User-Agent — чтобы не попасть в блок-лист WAF.</span></span></label>
-          <label class="mod"><input type="checkbox" id="passive"><span class="body"><span class="name">🛡 Пассивно</span><span class="desc">Без портскана/nikto/wafw00f/инъекций — только тихая разведка.</span></span></label>
+          <label class="mod"><input type="checkbox" id="passive"><span class="body"><span class="name">🛡 Пассивно</span><span class="desc">Без портскана/nikto/инъекций — только тихая разведка.</span></span></label>
         </div>
         <input id="proxy" placeholder="свой SOCKS5: socks5://127.0.0.1:9050 (опц., вместо Tor)" style="margin-top:8px">
       </div>
 
       <div class="card">
-        <h2>Модули сканирования</h2>
-        <div class="mods" id="opts"></div>
-        <div class="hint">«Эксплойты» и «msf check» <b>не запускают</b> эксплойты: подтверждают уязвимости неинтрузивно и готовят <code>.rc</code> для ручного запуска. «Активные SQL-инъекции» агрессивны — включай только по согласованию с клиентом.</div>
-        <div class="row">
-          <button class="act" id="start">▶ Запустить</button>
+        <h2>Запуск</h2>
+        <div class="row" style="margin-top:0">
+          <button class="act" id="start">▶ Запустить скан</button>
           <button class="ghost" id="stop" disabled>■ Стоп</button>
-          <button class="ghost" id="report" disabled>📄 Отчёт</button>
+          <button class="ghost" id="report" disabled>📄 Открыть отчёт</button>
         </div>
-        <div class="chips" id="chips"></div>
-        <div class="stage" id="stage"></div>
-        <div class="log" id="log" style="margin-top:8px"></div>
+        <div class="stage" id="stage" style="margin-top:12px">Готов к запуску. Выбери режим выше и заполни обязательные поля.</div>
+        <div class="log" id="log" style="margin-top:8px">журнал появится после запуска…</div>
+
+        <details class="modbox" id="modbox" style="margin-top:14px">
+          <summary>Тонкая настройка модулей</summary>
+          <div class="mods" id="opts"></div>
+          <div class="hint">«Эксплойты» и «msf check» <b>не запускают</b> эксплойты: подтверждают уязвимости неинтрузивно и готовят <code>.rc</code>. «Активные SQL-инъекции» агрессивны — только по согласованию.</div>
+        </details>
       </div>
     </div>
 
     <div class="card" style="margin-top:16px">
       <div class="fhead">
-        <h2 style="margin:0">Находки (<span id="fcount">0</span>)</h2>
+        <h2 style="margin:0">Находки</h2>
         <span class="spacer"></span>
-        <div class="filters" id="filters"></div>
+        <input type="text" id="fsearch" placeholder="🔍 поиск по находкам…">
       </div>
-      <table><thead><tr><th>Важность</th><th>Тип</th><th>Находка</th><th>Цель</th><th>Тул</th></tr></thead>
+      <div class="statrow" id="stats"></div>
+      <table><thead><tr><th style="width:92px">Важность</th><th style="width:150px">Тип</th><th>Находка</th><th>Цель</th><th style="width:96px">Тул</th></tr></thead>
       <tbody id="ftbody"></tbody></table>
     </div>
   </div>
 
   <!-- ===== ВКЛАДКА: ЭКСПЛУАТАЦИЯ ===== -->
   <div class="page" id="page-exploit">
-    <div class="warn">🧨 Подтверждение уязвимости (<b>msf check</b>), поиск эксплойтов и сборка команд — здесь. Сам боевой <code>exploit</code>/<code>run</code> и интерактивную сессию запускай в <code>msfconsole</code> (кнопка «копировать» даёт готовую команду) — это защита прод-систем клиента от случайного выстрела из браузера.</div>
+    <div class="warn">🧨 Подтверждение уязвимости (<b>msf check</b>), поиск эксплойтов и сборка команд — здесь. Боевой <code>run</code> и интерактивную сессию запускай в <code>msfconsole</code> (кнопка «Копировать» даёт готовую команду) — это защита прод-систем клиента от случайного выстрела из браузера.</div>
     <div class="grid">
       <div class="card">
         <h2>1 · Поиск эксплойтов (searchsploit)</h2>
@@ -179,7 +229,7 @@ a{color:var(--accent)}
         <div class="row" style="margin-top:0;gap:10px">
           <div style="width:120px"><label>LPORT</label><input type="text" id="exlport" value="4444"></div>
           <div style="flex:1"><label>PAYLOAD</label>
-            <select id="expayload" style="width:100%;background:var(--card2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px 10px;font:13px inherit">
+            <select id="expayload">
               <option value="">— по умолчанию модуля —</option>
               <option>linux/x64/meterpreter/reverse_tcp</option>
               <option>windows/x64/meterpreter/reverse_tcp</option>
@@ -196,7 +246,7 @@ a{color:var(--accent)}
           <button class="act" id="excheck">▶ check (неинтрузивно)</button>
           <button class="danger" id="exrun">🧨 Эксплуатировать (боевой)</button>
         </div>
-        <div class="hint">check только подтверждает уязвимость. «Эксплуатировать» запускает модуль по-настоящему (по нажатию, не автоматически) — цель проверяется по scope, факт запуска пишется в отчёт. Некоторые эксплойты могут нарушить работу сервиса — сначала жми check.</div>
+        <div class="hint">check только подтверждает уязвимость. «Эксплуатировать» запускает модуль по-настоящему (по нажатию) — цель проверяется по scope, факт запуска пишется в отчёт. Сначала жми check.</div>
         <div class="log" id="exout" style="height:200px;margin-top:8px;display:none"></div>
       </div>
     </div>
@@ -210,7 +260,7 @@ a{color:var(--accent)}
 
   <!-- ===== ВКЛАДКА: ПРОКСИ ===== -->
   <div class="page" id="page-proxy">
-    <div class="pxbar">🔀 Перехватывающий прокси (MITM): история, Intercept, Repeater — как Burp, но встроенный. Открывается в этой вкладке.</div>
+    <div class="pxbar">🔀 Перехватывающий прокси (MITM): история, Intercept, Repeater — как Burp, но встроенный.</div>
     <iframe id="pxframe" title="pentkit proxy" loading="lazy"></iframe>
   </div>
 </div>
@@ -218,14 +268,15 @@ a{color:var(--accent)}
 <script>
 const TOKEN="__TOKEN__";
 const H={"X-Token":TOKEN,"Content-Type":"application/json"};
-const SEV={critical:"#7c1d1d",high:"#b91c1c",medium:"#b45309",low:"#2563eb",info:"#475569"};
+const SEV={critical:"var(--sev-crit)",high:"var(--sev-high)",medium:"var(--sev-med)",low:"var(--sev-low)",info:"var(--sev-info)"};
 const SEVRU={critical:"Крит",high:"Высок",medium:"Средн",low:"Низк",info:"Инфо"};
+const TYPERU={subdomain:"Поддомен",dns:"DNS",port:"Порт/сервис",http:"HTTP",tech:"Технология",cloudflare:"Cloudflare",origin:"Origin",vuln:"Уязвимость",dir:"Директория",param:"Параметр",injection:"Инъекция",waf:"WAF",osint:"OSINT",header:"Заголовок",secret:"Секрет",cors:"CORS",exposure:"Открытый файл"};
 // [key, короткое имя, описание «что делает»]
 const MODULES=[
   ["cloudflare","Cloudflare / origin","Определяет Cloudflare и ищет реальный IP сервера (origin) за ним."],
   ["fingerprint","Отпечаток + WAF","Технологии, CMS и наличие WAF/фаервола (whatweb/wafw00f)."],
   ["osint","OSINT: почты/хосты","Собирает e-mail и хосты из открытых источников (theHarvester)."],
-  ["crawl","Краулинг + архивы","Обходит сайт и тянет URL из веб-архивов — больше поверхности (katana/gau/waybackurls/gf)."],
+  ["crawl","Краулинг + архивы","Обходит сайт и тянет URL из веб-архивов (katana/gau/waybackurls/gf)."],
   ["vuln","Уязвимости","Сканер по шаблонам: CVE, мисконфиги, с отсевом ложных (nuclei)."],
   ["secrets","Утечки ключей в JS","Ищет утёкшие токены AWS/Google/GitHub/Slack… в JS-файлах."],
   ["exposure","Открытые файлы/интерфейсы",".git/.env/бэкапы, Spring /actuator, Swagger/GraphQL, phpinfo — с проверкой содержимого. Без внешних тулов."],
@@ -242,8 +293,29 @@ const MODULES=[
   ["verify","Перепроверка","Перепроверяет срабатывания nuclei — меньше ложных в отчёте."]
 ];
 const TOOLMAP={cloudflare:null,fingerprint:"whatweb",osint:"theHarvester",crawl:"katana",vuln:"nuclei",secrets:null,exposure:null,web:"ffuf",sqli:"sqlmap",wordpress:"wpscan",tls:"testssl",nikto:"nikto",takeover:"nuclei",screenshots:"gowitness",nmap:"nmap",exploit:"searchsploit",msfcheck:"msfconsole",verify:"nuclei"};
-let filter="all", poll=null;
+const ALLKEYS=MODULES.map(m=>m[0]);
+function setOf(keys){const o={};keys.forEach(k=>o[k]=1);return o}
+// Готовые режимы в один клик.
+const PROFILES=[
+  {id:"defend",icon:"🛡️",name:"Защита моего сайта",tag:"safe",tagt:"безопасно",
+   desc:"Полная проверка своего сайта без разрушительных действий: открытые файлы, утечки, уязвимости, TLS, заголовки.",
+   mods:setOf(["cloudflare","fingerprint","crawl","vuln","secrets","exposure","web","tls","nikto","takeover","screenshots","verify"])},
+  {id:"recon",icon:"🐇",name:"Быстрая разведка",tag:"safe",tagt:"тихо",
+   desc:"Только тихий сбор поверхности: поддомены, технологии, почты, открытые файлы.",
+   mods:setOf(["cloudflare","fingerprint","osint","crawl","exposure"])},
+  {id:"full",icon:"🔍",name:"Полный аудит",tag:"safe",tagt:"без SQLi",
+   desc:"Все модули, кроме активных SQL-инъекций: портскан, эксплойты (без автозапуска), msf check.",
+   mods:setOf(ALLKEYS.filter(k=>k!=="sqli"))},
+  {id:"aggressive",icon:"⚔️",name:"Агрессивный",tag:"hot",tagt:"по согласию",
+   desc:"Всё включено + активные SQL-инъекции и DAST-фаззинг. Только с письменным согласием клиента!",
+   mods:setOf(ALLKEYS)},
+  {id:"custom",icon:"⚙️",name:"Свои модули",tag:"",tagt:"",
+   desc:"Выбрать модули вручную в «Тонкой настройке».",mods:null}
+];
+const AVAIL={}; // key -> тул доступен
+let curProfile="defend", filter="all", search="", poll=null, lastFindings=[];
 function el(id){return document.getElementById(id)}
+function esc(s){return(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 
 /* ---- тема ---- */
 function applyTheme(t){
@@ -259,8 +331,148 @@ function toggleTheme(){applyTheme(document.documentElement.getAttribute("data-th
 function showTab(name){
   document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===name));
   document.querySelectorAll(".page").forEach(p=>p.classList.toggle("active",p.id==="page-"+name));
-  if(name==="proxy" && !el("pxframe").src) el("pxframe").src="/proxy?t="+TOKEN; // ленивая загрузка
+  if(name==="proxy" && !el("pxframe").src) el("pxframe").src="/proxy?t="+TOKEN;
   if(name==="exploit") loadExploitInfo();
+}
+
+/* ---- пресеты ---- */
+function renderProfiles(){
+  el("profiles").innerHTML=PROFILES.map(p=>{
+    const tag=p.tag?`<span class="ptag ${p.tag}">${p.tagt}</span>`:"";
+    return `<div class="profile ${p.id===curProfile?'sel':''}" data-p="${p.id}">
+      <div class="pi">${p.icon}</div>
+      <div class="pn">${esc(p.name)} ${tag}</div>
+      <div class="pd">${esc(p.desc)}</div></div>`;
+  }).join("");
+  document.querySelectorAll(".profile").forEach(c=>c.onclick=()=>applyProfile(c.dataset.p));
+}
+function applyProfile(id){
+  curProfile=id;
+  const p=PROFILES.find(x=>x.id===id);
+  document.querySelectorAll(".profile").forEach(c=>c.classList.toggle("sel",c.dataset.p===id));
+  if(p.mods){
+    document.querySelectorAll('#opts input[data-k]').forEach(c=>{
+      const want=!!p.mods[c.dataset.k];
+      c.checked = want && AVAIL[c.dataset.k]!==false;  // не включаем то, чего нет в системе
+    });
+  }
+  // открыть настройку для custom, предупредить про агрессив
+  if(id==="custom") el("modbox").open=true;
+  const warnEl=document.getElementById("aggrwarn");
+  if(id==="aggressive"){ if(!warnEl) addAggrWarn(); } else if(warnEl) warnEl.remove();
+}
+function addAggrWarn(){
+  const d=document.createElement("div");d.className="warn";d.id="aggrwarn";
+  d.innerHTML="⚔️ Агрессивный режим: активные SQL-инъекции и фаззинг могут нарушить работу сервиса. Запускай только с письменным согласием клиента.";
+  el("profiles").insertAdjacentElement("afterend",d);
+}
+
+/* ---- модули ---- */
+async function loadTools(){
+  let tools={};
+  try{tools=await(await fetch("/api/tools",{headers:H})).json()}catch(e){}
+  const box=el("opts");box.innerHTML="";
+  for(const [k,name,desc] of MODULES){
+    const need=TOOLMAP[k];
+    const have=need?!!tools[need]:true;
+    AVAIL[k]=have;
+    const badge=need?`<span class="badge ${have?'on':'off'}">${have?need:need+" нет"}</span>`:`<span class="badge on">встроено</span>`;
+    const d=document.createElement("label");d.className="mod";
+    d.innerHTML=`<input type="checkbox" data-k="${k}"><span class="body"><span class="name">${name} ${badge}</span><span class="desc">${desc}</span></span>`;
+    box.appendChild(d);
+  }
+  // когда юзер правит галочки вручную — переключаемся в «свои модули»
+  document.querySelectorAll('#opts input[data-k]').forEach(c=>c.addEventListener("change",()=>{
+    if(curProfile!=="custom"){curProfile="custom";document.querySelectorAll(".profile").forEach(x=>x.classList.toggle("sel",x.dataset.p==="custom"));}
+  }));
+  applyProfile(curProfile); // проставить дефолтный режим с учётом доступности тулов
+}
+
+function collect(){
+  const o={};document.querySelectorAll('#opts input[data-k]').forEach(c=>o[c.dataset.k]=c.checked);
+  return {name:el("name").value,client:el("client").value,authorization:el("auth").value,
+    domains:el("domains").value,cidrs:el("cidrs").value,out_of_scope:el("oos").value,
+    concurrency:parseInt(el("conc").value||"10"),
+    tor:el("tor").checked,stealth:el("stealth").checked,passive:el("passive").checked,proxy:el("proxy").value,
+    options:o};
+}
+
+async function start(){
+  const body=collect();
+  if(!body.name||!body.authorization){alert("Заполни «name» и «Авторизация» — они обязательны.");return}
+  if(!body.domains.trim()&&!body.cidrs.trim()){alert("Укажи домены или CIDR в скоупе.");return}
+  if(!Object.values(body.options).some(Boolean)){alert("Выбери хотя бы один модуль (режим выше или «Тонкая настройка»).");return}
+  const r=await fetch("/api/scan",{method:"POST",headers:H,body:JSON.stringify(body)});
+  if(!r.ok){alert("Ошибка: "+await r.text());return}
+  el("start").disabled=true;el("stop").disabled=false;el("report").disabled=true;
+  el("live").innerHTML='<span class="spin"></span>';
+  el("log").textContent="";
+  if(poll)clearInterval(poll);poll=setInterval(tick,1500);tick();
+}
+async function stop(){await fetch("/api/stop",{method:"POST",headers:H})}
+
+async function tick(){
+  let s;try{s=await(await fetch("/api/status",{headers:H})).json()}catch(e){return}
+  if(!s.started)return;
+  el("stage").innerHTML=s.running?'<span class="spin"></span> Этап: '+esc(s.stage||"—"):'Этап: '+esc(s.stage||"—");
+  const log=el("log");log.textContent=(s.lines||[]).join("\n");log.scrollTop=log.scrollHeight;
+  loadFindings();
+  if(!s.running&&s.done){
+    clearInterval(poll);poll=null;
+    el("start").disabled=false;el("stop").disabled=true;
+    el("report").disabled=!s.reportReady;
+    el("live").innerHTML=s.error?'<span style="color:#f3a6a6;font-size:13px">ошибка</span>':'<span style="color:#6ee7a0;font-size:13px">✓ готово</span>';
+    if(s.error)el("stage").textContent="Ошибка: "+s.error;
+    else el("stage").textContent="Скан завершён. "+(s.reportReady?"Отчёт готов — кнопка «Открыть отчёт».":"");
+  }
+}
+
+/* ---- находки ---- */
+function sevCounts(f){const c={critical:0,high:0,medium:0,low:0,info:0};f.forEach(x=>{if(c[x.severity]!=null)c[x.severity]++});return c}
+function renderStats(f){
+  const c=sevCounts(f);
+  const cells=[["all","Всего",f.length,"var(--mut)"]].concat(
+    ["critical","high","medium","low","info"].map(k=>[k,SEVRU[k],c[k],SEV[k]]));
+  el("stats").innerHTML=cells.map(([k,lbl,n,col])=>
+    `<div class="stat ${filter===k?'sel':''}" data-f="${k}" style="border-left-color:${col}">
+      <div class="num" style="color:${k==='all'?'var(--fg)':col}">${n}</div><div class="lbl">${lbl}</div></div>`).join("");
+  document.querySelectorAll(".stat").forEach(s=>s.onclick=()=>{filter=s.dataset.f;renderFindings()});
+}
+async function loadFindings(){
+  let f;try{f=await(await fetch("/api/findings",{headers:H})).json()}catch(e){return}
+  lastFindings=f||[];renderFindings();
+}
+function findingRow(x,i){
+  const col=SEV[x.severity]||"var(--sev-info)";
+  const tgt=/^https?:\/\//.test(x.target)?`<a href="${esc(x.target)}" target="_blank" rel="noopener">${esc(x.target)}</a>`:esc(x.target);
+  const tags=(x.tags&&x.tags.length)?`<div class="tags">${esc(x.tags.join(" · "))}</div>`:"";
+  const hasDetail=x.detail||x.evidence;
+  const main=`<tr class="frow" data-i="${i}">
+    <td style="border-left-color:${col}"><span class="sev" style="background:${col}">${SEVRU[x.severity]||x.severity}</span></td>
+    <td><span class="tpill">${esc(TYPERU[x.type]||x.type)}</span></td>
+    <td>${hasDetail?'<span class="caret">▶</span> ':''}${esc(x.title)}${tags}</td>
+    <td class="tgt">${tgt}</td>
+    <td style="color:var(--mut)">${esc(x.tool||"")}</td></tr>`;
+  let det="";
+  if(hasDetail){
+    det=`<tr class="detail" data-d="${i}"><td colspan="5"><div class="inner">`+
+      (x.detail?`<div class="kv"><div class="k">Детали</div><div class="v">${esc(x.detail)}</div></div>`:"")+
+      (x.evidence?`<div class="kv"><div class="k">Доказательство</div><div class="v mono">${esc(x.evidence)}</div></div>`:"")+
+      `</div></td></tr>`;
+  }
+  return main+det;
+}
+function renderFindings(){
+  renderStats(lastFindings);
+  let f=lastFindings.filter(x=>filter==="all"||x.severity===filter);
+  if(search){const q=search.toLowerCase();f=f.filter(x=>((x.title||"")+" "+(x.target||"")+" "+(x.detail||"")+" "+(x.type||"")).toLowerCase().includes(q));}
+  if(!f.length){el("ftbody").innerHTML=`<tr><td colspan="5" class="empty">${lastFindings.length?"ничего не подходит под фильтр":"пока нет находок — запусти скан"}</td></tr>`;return}
+  el("ftbody").innerHTML=f.map(findingRow).join("");
+  document.querySelectorAll("#ftbody tr.frow").forEach(r=>r.onclick=e=>{
+    if(e.target.closest("a"))return;
+    const d=r.nextElementSibling;
+    if(d&&d.classList.contains("detail")){r.classList.toggle("open");d.classList.toggle("show");}
+  });
 }
 
 /* ---- эксплуатация ---- */
@@ -288,13 +500,13 @@ async function doSearchsploit(){
 function buildMsfCmd(){
   const mod=el("exmod").value.trim(),rh=el("exrhost").value.trim(),lh=el("exlhost").value.trim(),
     lp=el("exlport").value.trim(),pl=el("expayload").value;
-  const L=["msfconsole -q"];const x=[];
+  const x=["msfconsole -q"];
   if(mod)x.push("use "+mod);
   if(rh)x.push("set RHOSTS "+rh);
   if(pl){x.push("set PAYLOAD "+pl);if(lh)x.push("set LHOST "+lh);if(lp)x.push("set LPORT "+lp);}
   x.push("check   # сначала подтвердить");
   x.push("# run   # боевой запуск — только по согласованию с клиентом");
-  el("excmd").textContent=x.length?x.join("\n"):"заполни модуль и цель";
+  el("excmd").textContent=(mod||rh)?x.join("\n"):"заполни модуль и цель";
 }
 async function doMsfCheck(){
   const module=el("exmod").value.trim(),target=el("exrhost").value.trim();
@@ -316,88 +528,17 @@ async function doMsfRun(){
     const d=await r.json();
     out.textContent=(d.session?"✅ Похоже, сессия открыта!\n\n":"")+"$ "+d.cmd+"\n\n"+(d.output||"(пустой вывод)")+
       (d.session?"\n\n→ Для интерактивной работы с сессией запусти эту же команду в msfconsole (кнопка «Копировать»).":"");
-    loadFindings&&loadFindings();
+    loadFindings();
   }catch(e){out.textContent="ошибка: "+e.message}
 }
 
-/* ---- модули ---- */
-async function loadTools(){
-  let tools={};
-  try{tools=await(await fetch("/api/tools",{headers:H})).json()}catch(e){}
-  const box=el("opts");box.innerHTML="";
-  const offByDefault={sqli:true};
-  for(const [k,name,desc] of MODULES){
-    const need=TOOLMAP[k];
-    const have=need?tools[need]:true;
-    const checked=have&&!offByDefault[k];
-    const badge=need?`<span class="badge ${have?'on':'off'}">${have?need:need+" нет"}</span>`:
-      `<span class="badge on">встроено</span>`;
-    const d=document.createElement("label");d.className="mod";
-    d.innerHTML=`<input type="checkbox" data-k="${k}" ${checked?"checked":""}>`+
-      `<span class="body"><span class="name">${name} ${badge}</span><span class="desc">${desc}</span></span>`;
-    box.appendChild(d);
-  }
-}
-
-function collect(){
-  const o={};document.querySelectorAll('#opts input[data-k]').forEach(c=>o[c.dataset.k]=c.checked);
-  return {name:el("name").value,client:el("client").value,authorization:el("auth").value,
-    domains:el("domains").value,cidrs:el("cidrs").value,out_of_scope:el("oos").value,
-    concurrency:parseInt(el("conc").value||"10"),
-    tor:el("tor").checked,stealth:el("stealth").checked,passive:el("passive").checked,proxy:el("proxy").value,
-    options:o};
-}
-
-async function start(){
-  const body=collect();
-  if(!body.name||!body.authorization){alert("Заполни name и авторизацию");return}
-  if(!body.domains.trim()&&!body.cidrs.trim()){alert("Укажи домены или CIDR");return}
-  const r=await fetch("/api/scan",{method:"POST",headers:H,body:JSON.stringify(body)});
-  if(!r.ok){alert("Ошибка: "+await r.text());return}
-  el("start").disabled=true;el("stop").disabled=false;el("report").disabled=true;
-  el("live").innerHTML='<span class="spin"></span>';
-  if(poll)clearInterval(poll);poll=setInterval(tick,1500);tick();
-}
-async function stop(){await fetch("/api/stop",{method:"POST",headers:H})}
-
-async function tick(){
-  let s;try{s=await(await fetch("/api/status",{headers:H})).json()}catch(e){return}
-  if(!s.started)return;
-  el("stage").textContent="Этап: "+(s.stage||"—");
-  const c=s.counts||{};
-  el("chips").innerHTML=["critical","high","medium","low","info"].map(k=>
-    `<span class="chip" style="background:${SEV[k]}">${SEVRU[k]}: ${c[k]||0}</span>`).join("");
-  const log=el("log");log.textContent=(s.lines||[]).join("\n");log.scrollTop=log.scrollHeight;
-  loadFindings();
-  if(!s.running&&s.done){
-    clearInterval(poll);poll=null;
-    el("start").disabled=false;el("stop").disabled=true;
-    el("report").disabled=!s.reportReady;
-    el("live").innerHTML=s.error?'<span style="color:#f3a6a6;font-size:13px">ошибка</span>':'<span style="color:#6ee7a0;font-size:13px">готово</span>';
-    if(s.error)el("stage").textContent="Ошибка: "+s.error;
-  }
-}
-
-async function loadFindings(){
-  let f;try{f=await(await fetch("/api/findings",{headers:H})).json()}catch(e){return}
-  f=f||[];el("fcount").textContent=f.length;
-  const sevs=["all","critical","high","medium","low","info"];
-  el("filters").innerHTML=sevs.map(s=>`<button class="${filter===s?'sel':''}" onclick="setFilter('${s}')">${s==="all"?"Все":SEVRU[s]}</button>`).join("");
-  const rows=f.filter(x=>filter==="all"||x.severity===filter).map(x=>
-    `<tr><td><span class="sev" style="background:${SEV[x.severity]||'#475569'}">${SEVRU[x.severity]||x.severity}</span></td>`+
-    `<td>${esc(x.type)}</td><td>${esc(x.title)}${x.tags?'<br><span style="color:var(--mut);font-size:11px">'+x.tags.join(", ")+'</span>':''}</td>`+
-    `<td class="tgt">${esc(x.target)}</td><td style="color:var(--mut)">${esc(x.tool||"")}</td></tr>`).join("");
-  el("ftbody").innerHTML=rows||'<tr><td colspan="5" style="color:var(--mut)">пока нет находок</td></tr>';
-}
-function setFilter(s){filter=s;loadFindings()}
-function esc(s){return(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}
-
+/* ---- события ---- */
 el("themeBtn").onclick=toggleTheme;
 document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 el("start").onclick=start;
 el("stop").onclick=stop;
 el("report").onclick=()=>window.open("/api/report?t="+TOKEN,"_blank");
-// эксплуатация
+el("fsearch").addEventListener("input",e=>{search=e.target.value.trim();renderFindings()});
 el("ssbtn").onclick=doSearchsploit;
 el("ssq").addEventListener("keydown",e=>{if(e.key==="Enter")doSearchsploit()});
 ["exmod","exrhost","exlhost","exlport"].forEach(id=>el(id).addEventListener("input",buildMsfCmd));
@@ -406,7 +547,11 @@ el("excopy").onclick=()=>copyText(el("excmd").textContent);
 el("excheck").onclick=doMsfCheck;
 el("exrun").onclick=doMsfRun;
 el("exrccopy").onclick=()=>{const p=el("exrc").dataset.rc;if(p)copyText("msfconsole -q -r "+p)};
-loadTools();tick();
+
+renderProfiles();
+loadTools();
+renderFindings(); // пустое состояние: плитки-статистика + подсказка
+tick();
 </script>
 </body>
 </html>
