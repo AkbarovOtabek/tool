@@ -99,6 +99,10 @@ button:disabled{opacity:.5;cursor:not-allowed}
 .stat .lbl{font-size:11px;color:var(--mut);margin-top:3px;font-weight:600}
 
 /* ---- таблица находок ---- */
+.subfilter{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+.subfilter .schip{padding:5px 11px;font-size:12px;font-weight:600;background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:999px;cursor:pointer}
+.subfilter .schip:hover{border-color:var(--accent)}
+.subfilter .schip.sel{color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
 .fhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 #fsearch{max-width:260px;padding:7px 10px}
 table{width:100%;border-collapse:collapse;font-size:13px}
@@ -206,6 +210,7 @@ a{color:var(--accent)}
         <input type="text" id="fsearch" placeholder="🔍 поиск по находкам…">
       </div>
       <div class="statrow" id="stats"></div>
+      <div class="subfilter" id="subfilter"></div>
       <table><thead><tr><th style="width:92px">Важность</th><th style="width:150px">Тип</th><th>Находка</th><th>Цель</th><th style="width:96px">Тул</th></tr></thead>
       <tbody id="ftbody"></tbody></table>
     </div>
@@ -332,7 +337,7 @@ const PROFILES=[
    desc:"Выбрать модули вручную в «Тонкой настройке».",mods:null}
 ];
 const AVAIL={}; // key -> тул доступен
-let curProfile="defend", filter="all", search="", poll=null, lastFindings=[], lastWasSetup=false;
+let curProfile="defend", filter="all", search="", poll=null, lastFindings=[], lastWasSetup=false, subFilter="off";
 function el(id){return document.getElementById(id)}
 function esc(s){return(s||"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 
@@ -496,9 +501,32 @@ function findingRow(x,i){
   }
   return main+det;
 }
+// статус живости поддомена из тегов: live / noresp / dead / "" (не поддомен)
+function subStatus(x){
+  if(x.type!=="subdomain")return"";
+  const t=x.tags||[];
+  if(t.includes("live"))return"live";
+  if(t.includes("no-response"))return"noresp";
+  if(t.includes("dead"))return"dead";
+  return"";
+}
+function renderSubFilter(){
+  const subs=lastFindings.filter(x=>x.type==="subdomain");
+  const box=el("subfilter");
+  if(!subs.length){box.innerHTML="";return}
+  const cnt={live:0,noresp:0,dead:0};
+  subs.forEach(x=>{const s=subStatus(x);if(cnt[s]!=null)cnt[s]++});
+  const chips=[["off","Поддомены: все",subs.length],["live","🟢 живые",cnt.live],
+    ["noresp","🟡 не отвечают",cnt.noresp],["dead","🔴 мёртвые",cnt.dead]];
+  box.innerHTML=chips.map(([k,lbl,n])=>
+    `<span class="schip ${subFilter===k?'sel':''}" data-s="${k}">${lbl} (${n})</span>`).join("");
+  box.querySelectorAll(".schip").forEach(c=>c.onclick=()=>{subFilter=c.dataset.s;renderFindings()});
+}
 function renderFindings(){
   renderStats(lastFindings);
+  renderSubFilter();
   let f=lastFindings.filter(x=>filter==="all"||x.severity===filter);
+  if(subFilter!=="off")f=f.filter(x=>subStatus(x)===subFilter); // только поддомены нужного статуса
   if(search){const q=search.toLowerCase();f=f.filter(x=>((x.title||"")+" "+(x.target||"")+" "+(x.detail||"")+" "+(x.type||"")).toLowerCase().includes(q));}
   if(!f.length){el("ftbody").innerHTML=`<tr><td colspan="5" class="empty">${lastFindings.length?"ничего не подходит под фильтр":"пока нет находок — запусти скан"}</td></tr>`;return}
   el("ftbody").innerHTML=f.map(findingRow).join("");
