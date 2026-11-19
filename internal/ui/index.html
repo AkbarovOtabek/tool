@@ -167,7 +167,7 @@ a{color:var(--accent)}
         <label>Параллелизм</label><input type="number" id="conc" value="10" min="1" max="50" style="width:90px">
         <label style="margin-top:12px">Скрытность (против WAF/Firewall и блок-листов)</label>
         <div class="stealth">
-          <label class="mod"><input type="checkbox" id="tor"><span class="body"><span class="name">🔒 Весь трафик через Tor</span><span class="desc">Прячет твой IP через SOCKS5 9050 + proxychains4. Нужен сервис <code>tor</code>. На заказном тесте обычно НЕ нужен.</span></span></label>
+          <label class="mod"><input type="checkbox" id="tor"><span class="body"><span class="name">🔒 Весь трафик через Tor</span><span class="desc">Прячет твой IP через SOCKS5 9050 + proxychains4. Сервис tor запустится автоматически. На заказном тесте обычно НЕ нужен.</span></span></label>
           <label class="mod"><input type="checkbox" id="stealth"><span class="body"><span class="name">🐢 Stealth</span><span class="desc">Низкий rate/параллелизм, джиттер, ротация User-Agent — чтобы не попасть в блок-лист WAF.</span></span></label>
           <label class="mod"><input type="checkbox" id="passive"><span class="body"><span class="name">🛡 Пассивно</span><span class="desc">Без портскана/nikto/инъекций — только тихая разведка.</span></span></label>
         </div>

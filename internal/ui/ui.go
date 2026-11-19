@@ -278,6 +278,10 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 			setup.Install(ctx, rn, sink)
 		}
 		if addr, on := cfg.SOCKS(); on {
+			// Для Tor пробуем автоматически поднять сервис, если он не запущен.
+			if cfg.Tor && cfg.Proxy == "" {
+				netx.EnsureTor(addr, func(m string) { sink.Logf("🔒 %s\n", m) })
+			}
 			if err := netx.Check(addr, 5*time.Second); err != nil {
 				sink.Logf("✖ Tor/прокси недоступен: %v — запусти сервис tor или задай proxy\n", err)
 				s.mu.Lock()

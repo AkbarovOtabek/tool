@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -192,6 +193,49 @@ func Normalize(proxy string) string {
 
 // Check проверяет, что по адресу отвечает SOCKS5-прокси (рукопожатие без
 // аутентификации). Быстрый фейл до старта сканирования, если Tor не запущен.
+// EnsureTor проверяет, слушает ли Tor на proxy (host:port), и если нет —
+// пытается стартовать системный сервис tor (systemctl/service, c sudo при
+// необходимости) и ждёт появления порта. Возвращает true, если Tor доступен.
+// log получает короткие статусные строки (может быть nil).
+func EnsureTor(proxy string, log func(string)) bool {
+	if Check(proxy, 2*time.Second) == nil {
+		return true
+	}
+	if log != nil {
+		log("Tor не запущен — стартую сервис tor...")
+	}
+	var prefix []string
+	if os.Geteuid() != 0 {
+		if _, err := exec.LookPath("sudo"); err == nil {
+			prefix = []string{"sudo", "-n"}
+		}
+	}
+	for _, c := range [][]string{
+		{"systemctl", "start", "tor"},
+		{"service", "tor", "start"},
+		{"systemctl", "start", "tor@default"},
+	} {
+		argv := append(append([]string{}, prefix...), c...)
+		if _, err := exec.LookPath(argv[0]); err != nil {
+			continue
+		}
+		_ = exec.Command(argv[0], argv[1:]...).Run()
+		for i := 0; i < 8; i++ {
+			if Check(proxy, 2*time.Second) == nil {
+				if log != nil {
+					log("Tor запущен ✓")
+				}
+				return true
+			}
+			time.Sleep(time.Second)
+		}
+	}
+	if log != nil {
+		log("не удалось автоматически запустить Tor (запусти вручную: sudo systemctl start tor)")
+	}
+	return Check(proxy, 2*time.Second) == nil
+}
+
 func Check(proxy string, timeout time.Duration) error {
 	d := &net.Dialer{Timeout: timeout}
 	conn, err := d.Dial("tcp", proxy)

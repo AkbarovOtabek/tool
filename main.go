@@ -228,6 +228,9 @@ func load(cfgPath string) (*config.Config, *scope.Scope, *store.Store) {
 func setupOpsec(cfg *config.Config, rn *runner.Runner, engDir string) {
 	rn.Stealth = cfg.Stealth
 	if addr, on := cfg.SOCKS(); on {
+		if cfg.Tor && cfg.Proxy == "" {
+			netx.EnsureTor(addr, func(m string) { fmt.Println("    🔒", m) })
+		}
 		if err := netx.Check(addr, 5*time.Second); err != nil {
 			fmt.Fprintf(os.Stderr, "Ошибка прокси/Tor: %v\n"+
 				"   Запусти сервис tor (sudo systemctl start tor; ss -lnt | grep 9050)\n"+
