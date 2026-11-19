@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"pentkit/internal/ad"
 	"pentkit/internal/analyze"
 	"pentkit/internal/apisec"
 	"pentkit/internal/cloudflare"
@@ -46,6 +47,7 @@ type Options struct {
 	Leaks       bool // OSINT по базам утечек LeakIX/IntelX (нужны ключи)
 	Smuggle     bool // HTTP request smuggling (CL.TE/TE.CL) — рискованно, осознанно
 	BruteDNS    bool // активный перебор поддоменов (puredns + massdns)
+	AD          bool // разведка Active Directory (netexec/kerbrute/impacket) — внутренняя работа
 	Notify      bool // уведомления о крит/high находках (Telegram/Slack/Discord)
 	Web         bool // ffuf/arjun/dalfox + аудит заголовков
 	SQLi        bool // активные инъекции: sqlmap + nuclei -dast (агрессивно)
@@ -240,6 +242,11 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 	if opts.Screenshots {
 		ev.Stage("Скриншоты")
 		extra.Screenshots(ctx, cfg, rn, st, ev, rec.URLs())
+	}
+
+	if opts.AD {
+		ev.Stage("Active Directory (внутренняя разведка)")
+		ad.Run(ctx, cfg, rn, st, ev)
 	}
 
 	ev.Stage("Отчёт")

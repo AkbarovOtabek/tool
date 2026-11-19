@@ -85,6 +85,13 @@ var registry = []tool{
 	{"john", []step{{kindApt, "john"}}},       // офлайн-крекинг хэшей
 	{"hashcat", []step{{kindApt, "hashcat"}}}, // офлайн-крекинг хэшей (GPU)
 	{"commix", []step{{kindApt, "commix"}, {kindPipx, "git+https://github.com/commixproject/commix"}}},
+	// --- Active Directory / внутрянка ---
+	{"kerbrute", []step{{kindGo, "github.com/ropnop/kerbrute@latest"}}},
+	{"nxc", []step{{kindApt, "netexec"}, {kindPipx, "git+https://github.com/Pennyw0rth/NetExec"}}},
+	{"enum4linux-ng", []step{{kindApt, "enum4linux-ng"}, {kindPipx, "enum4linux-ng"}}},
+	{"impacket-GetNPUsers", []step{{kindApt, "impacket-scripts"}, {kindPipx, "impacket"}}},
+	{"smbmap", []step{{kindApt, "smbmap"}}},
+	{"ldapsearch", []step{{kindApt, "ldap-utils"}}},
 	{"searchsploit", []step{{kindApt, "exploitdb"}}},
 	{"msfconsole", []step{{kindApt, "metasploit-framework"}}},
 	{"testssl.sh", []step{{kindApt, "testssl.sh"}}},

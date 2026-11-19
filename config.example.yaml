@@ -38,3 +38,10 @@ notify:                     # уведомления о крит/high наход
   telegram_chat: ""         # chat_id (твой id или id группы)
   slack_webhook: ""         # Slack Incoming Webhook URL
   discord_webhook: ""       # Discord Webhook URL
+
+ad:                         # Active Directory — только для внутренних авторизованных работ
+  domain: ""                # FQDN домена, напр. corp.local
+  dc: ""                    # IP/host контроллера домена
+  username: ""              # логин для аутентифицированных проверок (опц.)
+  password: ""              # пароль (опц.)
+  userlist: ""              # путь к списку юзеров (kerbrute / AS-REP roasting)

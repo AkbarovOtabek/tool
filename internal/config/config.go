@@ -39,6 +39,17 @@ type Config struct {
 	Wordlists Wordlists `yaml:"wordlists"`
 	// Notify — куда слать уведомления о крит/high находках.
 	Notify Notify `yaml:"notify"`
+	// AD — цель Active Directory для модуля внутренней разведки (опционально).
+	AD AD `yaml:"ad"`
+}
+
+// AD — параметры цели Active Directory (для авторизованной внутренней работы).
+type AD struct {
+	Domain   string `yaml:"domain"`   // FQDN домена, напр. corp.local
+	DC       string `yaml:"dc"`       // IP/host контроллера домена
+	Username string `yaml:"username"` // логин для аутентифицированных проверок (опц.)
+	Password string `yaml:"password"` // пароль (опц.)
+	UserList string `yaml:"userlist"` // путь к списку юзеров (kerbrute/AS-REP)
 }
 
 // Notify — каналы уведомлений (все опциональны). Пусто = не слать.
