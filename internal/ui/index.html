@@ -168,6 +168,9 @@ a{color:var(--accent)}
           <label class="mod"><input type="checkbox" id="passive"><span class="body"><span class="name">🛡 Пассивно</span><span class="desc">Без портскана/nikto/инъекций — только тихая разведка.</span></span></label>
         </div>
         <input id="proxy" placeholder="свой SOCKS5: socks5://127.0.0.1:9050 (опц., вместо Tor)" style="margin-top:8px">
+        <label style="margin-top:12px">API-ключи OSINT (опц., для модуля «Утечки»)</label>
+        <input type="text" id="leakixKey" placeholder="LeakIX API-ключ (leakix.net)" style="margin-top:2px">
+        <input type="text" id="intelxKey" placeholder="IntelX API-ключ (intelx.io)" style="margin-top:6px">
       </div>
 
       <div class="card">
@@ -194,6 +197,8 @@ a{color:var(--accent)}
       <div class="fhead">
         <h2 style="margin:0">Находки</h2>
         <span class="spacer"></span>
+        <button class="ghost" id="expCsv" style="padding:6px 12px;font-size:13px">⬇ CSV</button>
+        <button class="ghost" id="expJson" style="padding:6px 12px;font-size:13px">⬇ JSON</button>
         <input type="text" id="fsearch" placeholder="🔍 поиск по находкам…">
       </div>
       <div class="statrow" id="stats"></div>
@@ -272,7 +277,7 @@ const TOKEN="__TOKEN__";
 const H={"X-Token":TOKEN,"Content-Type":"application/json"};
 const SEV={critical:"var(--sev-crit)",high:"var(--sev-high)",medium:"var(--sev-med)",low:"var(--sev-low)",info:"var(--sev-info)"};
 const SEVRU={critical:"Крит",high:"Высок",medium:"Средн",low:"Низк",info:"Инфо"};
-const TYPERU={subdomain:"Поддомен",dns:"DNS",port:"Порт/сервис",http:"HTTP",tech:"Технология",cloudflare:"Cloudflare",origin:"Origin",vuln:"Уязвимость",dir:"Директория",param:"Параметр",injection:"Инъекция",waf:"WAF",osint:"OSINT",header:"Заголовок",secret:"Секрет",cors:"CORS",exposure:"Открытый файл",jwt:"JWT",api:"API",auth:"Аутентификация",bypass:"Обход доступа"};
+const TYPERU={subdomain:"Поддомен",dns:"DNS",port:"Порт/сервис",http:"HTTP",tech:"Технология",cloudflare:"Cloudflare",origin:"Origin",vuln:"Уязвимость",dir:"Директория",param:"Параметр",injection:"Инъекция",waf:"WAF",osint:"OSINT",header:"Заголовок",secret:"Секрет",cors:"CORS",exposure:"Открытый файл",jwt:"JWT",api:"API",auth:"Аутентификация",bypass:"Обход доступа",leak:"Утечки (OSINT)",smuggle:"Request smuggling"};
 // [key, короткое имя, описание «что делает»]
 const MODULES=[
   ["cloudflare","Cloudflare / origin","Определяет Cloudflare и ищет реальный IP сервера (origin) за ним."],
@@ -286,6 +291,8 @@ const MODULES=[
   ["apidisco","API-дискавери","Брутфорс скрытых API-эндпоинтов по словарям (kiterunner)."],
   ["bypass","Обход 401/403","Пробует открыть закрытые страницы: X-Forwarded-For, X-Original-URL, трюки с путём. Без внешних тулов."],
   ["authtest","⚠ Rate-limit входа","Активно: серия ложных логинов — есть ли защита от брутфорса на /login, /reset. Только по согласованию."],
+  ["leaks","Утечки (LeakIX/IntelX)","Пассивный OSINT по базам утечек: открытые сервисы, конфиги, слитые данные/пароли. Нужны API-ключи (ниже)."],
+  ["smuggle","⚠ Request smuggling","Активно и рискованно: timing-детект CL.TE/TE.CL (рассинхрон фронт/бэкенд). Может задеть хрупкие прокси. Только по согласованию."],
   ["web","Веб-тесты + заголовки","Директории, скрытые параметры, XSS, CORS, security-заголовки (ffuf/ferox/dalfox)."],
   ["sqli","⚠ Активные SQL-инъекции","Боевые инъекции и фаззинг (sqlmap/dast). Агрессивно — только по согласованию."],
   ["wordpress","WordPress","Уязвимые плагины, темы и версии WordPress (wpscan)."],
@@ -298,22 +305,22 @@ const MODULES=[
   ["msfcheck","Metasploit check","Неинтрузивно подтверждает уязвимость, без эксплуатации."],
   ["verify","Перепроверка","Перепроверяет срабатывания nuclei — меньше ложных в отчёте."]
 ];
-const TOOLMAP={cloudflare:null,fingerprint:"whatweb",osint:"theHarvester",crawl:"katana",vuln:"nuclei",secrets:null,exposure:null,jwt:null,apidisco:"kr",bypass:null,authtest:null,web:"ffuf",sqli:"sqlmap",wordpress:"wpscan",tls:"testssl",nikto:"nikto",takeover:"nuclei",screenshots:"gowitness",nmap:"nmap",exploit:"searchsploit",msfcheck:"msfconsole",verify:"nuclei"};
+const TOOLMAP={cloudflare:null,fingerprint:"whatweb",osint:"theHarvester",crawl:"katana",vuln:"nuclei",secrets:null,exposure:null,jwt:null,apidisco:"kr",bypass:null,authtest:null,leaks:null,smuggle:null,web:"ffuf",sqli:"sqlmap",wordpress:"wpscan",tls:"testssl",nikto:"nikto",takeover:"nuclei",screenshots:"gowitness",nmap:"nmap",exploit:"searchsploit",msfcheck:"msfconsole",verify:"nuclei"};
 const ALLKEYS=MODULES.map(m=>m[0]);
 function setOf(keys){const o={};keys.forEach(k=>o[k]=1);return o}
 // Готовые режимы в один клик.
 const PROFILES=[
   {id:"defend",icon:"🛡️",name:"Защита моего сайта",tag:"safe",tagt:"безопасно",
-   desc:"Полная проверка своего сайта без разрушительных действий: открытые файлы, утечки, JWT, обход доступа, уязвимости, TLS, заголовки.",
-   mods:setOf(["cloudflare","fingerprint","crawl","vuln","secrets","exposure","jwt","bypass","web","tls","nikto","takeover","screenshots","verify"])},
+   desc:"Полная проверка своего сайта без разрушительных действий: открытые файлы, утечки, JWT, обход доступа, OSINT-утечки, уязвимости, TLS, заголовки.",
+   mods:setOf(["cloudflare","fingerprint","crawl","vuln","secrets","exposure","jwt","bypass","leaks","web","tls","nikto","takeover","screenshots","verify"])},
   {id:"recon",icon:"🐇",name:"Быстрая разведка",tag:"safe",tagt:"тихо",
    desc:"Только тихий сбор поверхности: поддомены, технологии, почты, открытые файлы.",
    mods:setOf(["cloudflare","fingerprint","osint","crawl","exposure"])},
   {id:"full",icon:"🔍",name:"Полный аудит",tag:"safe",tagt:"без SQLi",
-   desc:"Все модули, кроме активных SQL-инъекций и теста rate-limit: портскан, API-дискавери, эксплойты (без автозапуска), msf check.",
-   mods:setOf(ALLKEYS.filter(k=>k!=="sqli"&&k!=="authtest"))},
+   desc:"Все модули, кроме рискованных активных (SQL-инъекции, rate-limit, request smuggling): портскан, API-дискавери, эксплойты (без автозапуска), msf check.",
+   mods:setOf(ALLKEYS.filter(k=>k!=="sqli"&&k!=="authtest"&&k!=="smuggle"))},
   {id:"aggressive",icon:"⚔️",name:"Агрессивный",tag:"hot",tagt:"по согласию",
-   desc:"Всё включено + активные SQL-инъекции, DAST-фаззинг и тест rate-limit входа (серия логинов). Только с письменным согласием клиента!",
+   desc:"Всё включено + активные SQL-инъекции, DAST-фаззинг, тест rate-limit и request smuggling. Может нарушить работу сервиса — только с письменным согласием клиента!",
    mods:setOf(ALLKEYS)},
   {id:"custom",icon:"⚙️",name:"Свои модули",tag:"",tagt:"",
    desc:"Выбрать модули вручную в «Тонкой настройке».",mods:null}
@@ -369,7 +376,7 @@ function applyProfile(id){
 }
 function addAggrWarn(){
   const d=document.createElement("div");d.className="warn";d.id="aggrwarn";
-  d.innerHTML="⚔️ Агрессивный режим: активные SQL-инъекции и фаззинг могут нарушить работу сервиса. Запускай только с письменным согласием клиента.";
+  d.innerHTML="⚔️ Агрессивный режим: активные SQL-инъекции, фаззинг и request smuggling (рассинхрон прокси) могут нарушить работу сервиса. Запускай только с письменным согласием клиента.";
   el("profiles").insertAdjacentElement("afterend",d);
 }
 
@@ -401,6 +408,7 @@ function collect(){
     concurrency:parseInt(el("conc").value||"10"),
     tor:el("tor").checked,stealth:el("stealth").checked,passive:el("passive").checked,proxy:el("proxy").value,
     install:el("install").checked,
+    leakix_key:el("leakixKey").value,intelx_key:el("intelxKey").value,
     options:o};
 }
 
@@ -559,6 +567,8 @@ el("stop").onclick=stop;
 el("setupBtn").onclick=doSetup;
 el("report").onclick=()=>window.open("/api/report?t="+TOKEN,"_blank");
 el("fsearch").addEventListener("input",e=>{search=e.target.value.trim();renderFindings()});
+el("expCsv").onclick=()=>{if(!lastFindings.length){alert("Пока нет находок для экспорта");return}window.open("/api/export?format=csv&t="+TOKEN,"_blank")};
+el("expJson").onclick=()=>{if(!lastFindings.length){alert("Пока нет находок для экспорта");return}window.open("/api/export?format=json&t="+TOKEN,"_blank")};
 el("ssbtn").onclick=doSearchsploit;
 el("ssq").addEventListener("keydown",e=>{if(e.key==="Enter")doSearchsploit()});
 ["exmod","exrhost","exlhost","exlport"].forEach(id=>el(id).addEventListener("input",buildMsfCmd));

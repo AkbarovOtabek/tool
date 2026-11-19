@@ -17,11 +17,13 @@ import (
 	"pentkit/internal/exploit"
 	"pentkit/internal/exposure"
 	"pentkit/internal/extra"
+	"pentkit/internal/leaks"
 	"pentkit/internal/recon"
 	"pentkit/internal/report"
 	"pentkit/internal/runner"
 	"pentkit/internal/scope"
 	"pentkit/internal/secrets"
+	"pentkit/internal/smuggle"
 	"pentkit/internal/store"
 	"pentkit/internal/vuln"
 	"pentkit/internal/web"
@@ -40,6 +42,8 @@ type Options struct {
 	APIDisco    bool // дискавери API-эндпоинтов (kiterunner)
 	Bypass      bool // обход 401/403 (broken access control)
 	AuthTest    bool // активная проверка rate-limit на auth-эндпоинтах (осознанно)
+	Leaks       bool // OSINT по базам утечек LeakIX/IntelX (нужны ключи)
+	Smuggle     bool // HTTP request smuggling (CL.TE/TE.CL) — рискованно, осознанно
 	Web         bool // ffuf/arjun/dalfox + аудит заголовков
 	SQLi        bool // активные инъекции: sqlmap + nuclei -dast (агрессивно)
 	WordPress   bool // wpscan
@@ -59,7 +63,7 @@ func AllOn() Options {
 	return Options{
 		Cloudflare: true, Crawl: true, Fingerprint: true, OSINT: true,
 		Vuln: true, Secrets: true, Exposure: true, JWT: true, APIDisco: true, Bypass: true,
-		Web: true, WordPress: true,
+		Leaks: true, Web: true, WordPress: true,
 		TLS: true, Nikto: true, Takeover: true, Screenshots: true,
 		Nmap: true, Exploit: true, MsfCheck: true, Verify: true,
 	}
@@ -124,6 +128,11 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 		apisec.AuthRateLimit(ctx, rn, st, ev, urls)
 	}
 
+	if opts.Smuggle {
+		ev.Stage("HTTP request smuggling (CL.TE/TE.CL)")
+		smuggle.Run(ctx, rn, st, ev, urls)
+	}
+
 	if opts.Fingerprint {
 		ev.Stage("Отпечаток (whatweb/wafw00f)")
 		analyze.Fingerprint(ctx, rn, st, ev, rec.URLs())
@@ -132,6 +141,11 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 	if opts.OSINT {
 		ev.Stage("OSINT (theHarvester)")
 		analyze.OSINT(ctx, rn, st, ev, sc.Domains())
+	}
+
+	if opts.Leaks {
+		ev.Stage("Утечки (LeakIX / IntelX)")
+		leaks.Run(ctx, cfg, st, ev, sc.Domains())
 	}
 
 	if opts.Cloudflare {

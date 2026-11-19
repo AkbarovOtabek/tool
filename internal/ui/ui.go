@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/rand"
 	_ "embed"
+	"encoding/csv"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -72,6 +73,8 @@ type scanRequest struct {
 	Stealth       bool   `json:"stealth"`
 	Passive       bool   `json:"passive"`
 	Install       bool   `json:"install"` // доустановить недостающие тулы перед запуском
+	LeakixKey     string `json:"leakix_key"`
+	IntelxKey     string `json:"intelx_key"`
 	Options       struct {
 		Cloudflare  bool `json:"cloudflare"`
 		Crawl       bool `json:"crawl"`
@@ -84,6 +87,8 @@ type scanRequest struct {
 		APIDisco    bool `json:"apidisco"`
 		Bypass      bool `json:"bypass"`
 		AuthTest    bool `json:"authtest"`
+		Leaks       bool `json:"leaks"`
+		Smuggle     bool `json:"smuggle"`
 		Web         bool `json:"web"`
 		SQLi        bool `json:"sqli"`
 		WordPress   bool `json:"wordpress"`
@@ -113,6 +118,7 @@ func Serve(addr string) error {
 	mux.HandleFunc("/api/findings", s.auth(s.handleFindings))
 	mux.HandleFunc("/api/stop", s.auth(s.handleStop))
 	mux.HandleFunc("/api/report", s.auth(s.handleReport))
+	mux.HandleFunc("/api/export", s.auth(s.handleExport))
 
 	// Эксплуатация (кокпит): подтверждение (msf check), поиск эксплойтов,
 	// готовый .rc. Сам боевой exploit/run не запускается из веба — только check.
@@ -221,6 +227,7 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 		Vuln: req.Options.Vuln, Secrets: req.Options.Secrets,
 		Exposure: req.Options.Exposure, JWT: req.Options.JWT,
 		APIDisco: req.Options.APIDisco, Bypass: req.Options.Bypass, AuthTest: req.Options.AuthTest,
+		Leaks: req.Options.Leaks, Smuggle: req.Options.Smuggle,
 		Web: req.Options.Web, SQLi: req.Options.SQLi,
 		WordPress: req.Options.WordPress, TLS: req.Options.TLS,
 		Nikto: req.Options.Nikto, Takeover: req.Options.Takeover,
@@ -403,6 +410,42 @@ func (s *Server) handleReport(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write(data)
+}
+
+// handleExport отдаёт находки файлом: JSON (как есть) или CSV.
+func (s *Server) handleExport(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	j := s.job
+	s.mu.Unlock()
+	var findings []store.Finding
+	if j != nil {
+		findings = j.st.All()
+	}
+	name := "pentkit"
+	if j != nil && j.cfg != nil && j.cfg.Engagement.Name != "" {
+		name = j.cfg.Engagement.Name
+	}
+	switch r.URL.Query().Get("format") {
+	case "csv":
+		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="`+name+`-findings.csv"`)
+		cw := csv.NewWriter(w)
+		cw.Write([]string{"severity", "type", "title", "target", "detail", "evidence", "tool", "tags", "created_at"})
+		for _, f := range findings {
+			cw.Write([]string{string(f.Severity), f.Type, f.Title, f.Target, f.Detail, f.Evidence,
+				f.Tool, strings.Join(f.Tags, " "), f.CreatedAt.Format(time.RFC3339)})
+		}
+		cw.Flush()
+	default: // json
+		w.Header().Set("Content-Type", "application/json; charset=utf-8")
+		w.Header().Set("Content-Disposition", `attachment; filename="`+name+`-findings.json"`)
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		if findings == nil {
+			findings = []store.Finding{}
+		}
+		enc.Encode(findings)
+	}
 }
 
 // --- Эксплуатация (кокпит) ---
@@ -787,6 +830,8 @@ func buildConfig(req scanRequest) (*config.Config, *scope.Scope, error) {
 	cfg.Tor = req.Tor
 	cfg.Proxy = strings.TrimSpace(req.Proxy)
 	cfg.Stealth = req.Stealth
+	cfg.Keys.LeakIX = strings.TrimSpace(req.LeakixKey)
+	cfg.Keys.IntelX = strings.TrimSpace(req.IntelxKey)
 	if cfg.Stealth {
 		if cfg.RateLimit == 0 {
 			cfg.RateLimit = 10

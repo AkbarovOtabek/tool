@@ -38,6 +38,7 @@ var typeRu = map[string]string{
 	store.TypeExposure: "Открытые файлы/интерфейсы",
 	store.TypeJWT:      "JWT", store.TypeAPI: "API-эндпоинты",
 	store.TypeAuth: "Аутентификация", store.TypeBypass: "Обход доступа",
+	store.TypeLeak: "Утечки (OSINT)", store.TypeSmuggle: "Request smuggling",
 }
 
 func typeLabel(t string) string {
