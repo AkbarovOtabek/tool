@@ -124,6 +124,25 @@ button:disabled{opacity:.45;cursor:not-allowed;box-shadow:none;transform:none!im
 .stat .num{font-size:24px;font-weight:800;line-height:1;letter-spacing:-.5px}
 .stat .lbl{font-size:11px;color:var(--mut);margin-top:5px;font-weight:600}
 
+/* ---- сводка: donut + плитки ---- */
+.findsummary{display:flex;gap:16px;align-items:stretch;margin-bottom:16px}
+.findsummary .statrow{flex:1;margin-bottom:0}
+.donutwrap{position:relative;width:150px;flex-shrink:0;background:var(--card2);border:1px solid var(--line);border-radius:14px;display:flex;align-items:center;justify-content:center}
+.donutwrap svg{display:block}
+.donutc{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+.donutc .dn{font-size:26px;font-weight:800;letter-spacing:-.5px;line-height:1}
+.donutc .dl{font-size:10.5px;color:var(--mut);font-weight:600;margin-top:2px}
+@media(max-width:760px){.findsummary{flex-direction:column}.donutwrap{width:100%;padding:10px 0}}
+
+/* ---- иконка-бейдж пресета ---- */
+.profile .pi{width:40px;height:40px;border-radius:11px;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;font-size:21px;line-height:1}
+.profile.sel .pi{background:var(--grad);box-shadow:0 6px 14px rgba(99,102,241,.35)}
+
+/* ---- счётчик находок в сайдбаре ---- */
+.nb{margin-left:auto;font-size:11px;font-weight:800;min-width:20px;text-align:center;padding:1px 7px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.tab.active .nb{background:rgba(255,255,255,.25);color:#fff}
+.nb:empty{display:none}
+
 /* ---- таблица находок ---- */
 .subfilter{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
 .subfilter .schip{padding:6px 13px;font-size:12px;font-weight:600;background:var(--card2);border:1px solid var(--line);color:var(--mut);border-radius:999px;cursor:pointer;transition:.12s}
@@ -180,7 +199,7 @@ a{color:var(--accent)}
     <div class="brandsub">Оркестратор авторизованного пентеста — recon, уязвимости, веб-тесты, AD, отчёт.</div>
     <nav class="nav">
       <div class="navlbl">Разделы</div>
-      <button class="tab active" data-tab="scan"><span class="ni">🔎</span> Сканер</button>
+      <button class="tab active" data-tab="scan"><span class="ni">🔎</span> Сканер<span class="nb" id="navCount"></span></button>
       <button class="tab" data-tab="exploit"><span class="ni">🧨</span> Эксплуатация</button>
       <button class="tab" data-tab="proxy"><span class="ni">🔀</span> Прокси</button>
     </nav>
@@ -264,7 +283,10 @@ a{color:var(--accent)}
         <button class="ghost" id="expJson" style="padding:6px 12px;font-size:13px">⬇ JSON</button>
         <input type="text" id="fsearch" placeholder="🔍 поиск по находкам…">
       </div>
-      <div class="statrow" id="stats"></div>
+      <div class="findsummary">
+        <div class="donutwrap" id="donut"></div>
+        <div class="statrow" id="stats"></div>
+      </div>
       <div class="subfilter" id="subfilter"></div>
       <table><thead><tr><th style="width:92px">Важность</th><th style="width:150px">Тип</th><th>Находка</th><th>Цель</th><th style="width:96px">Тул</th></tr></thead>
       <tbody id="ftbody"></tbody></table>
@@ -538,6 +560,22 @@ function renderStats(f){
       <div class="num" style="color:${k==='all'?'var(--fg)':col}">${n}</div><div class="lbl">${lbl}</div></div>`).join("");
   document.querySelectorAll(".stat").forEach(s=>s.onclick=()=>{filter=s.dataset.f;renderFindings()});
 }
+function renderDonut(f){
+  const c=sevCounts(f), total=f.length, R=54, SW=16, CIRC=2*Math.PI*R;
+  let off=0, segs="";
+  if(total>0){
+    for(const k of ["critical","high","medium","low","info"]){
+      if(!c[k])continue;
+      const len=c[k]/total*CIRC;
+      segs+=`<circle cx="75" cy="75" r="${R}" fill="none" stroke="${SEV[k]}" stroke-width="${SW}" stroke-dasharray="${len} ${CIRC-len}" stroke-dashoffset="${-off}" transform="rotate(-90 75 75)" stroke-linecap="butt"/>`;
+      off+=len;
+    }
+  } else {
+    segs=`<circle cx="75" cy="75" r="${R}" fill="none" stroke="var(--line)" stroke-width="${SW}"/>`;
+  }
+  el("donut").innerHTML=`<svg width="150" height="150" viewBox="0 0 150 150">${segs}</svg>`+
+    `<div class="donutc"><div class="dn">${total}</div><div class="dl">находок</div></div>`;
+}
 async function loadFindings(){
   let f;try{f=await(await fetch("/api/findings",{headers:H})).json()}catch(e){return}
   lastFindings=f||[];renderFindings();
@@ -585,6 +623,8 @@ function renderSubFilter(){
 }
 function renderFindings(){
   renderStats(lastFindings);
+  renderDonut(lastFindings);
+  el("navCount").textContent=lastFindings.length||"";
   renderSubFilter();
   let f=lastFindings.filter(x=>filter==="all"||x.severity===filter);
   if(subFilter!=="off")f=f.filter(x=>subStatus(x)===subFilter); // только поддомены нужного статуса
