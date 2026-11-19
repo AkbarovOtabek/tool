@@ -17,6 +17,10 @@ func TestGenerateIncludesChecklistAndDorks(t *testing.T) {
 	}
 	st.Add(store.Finding{Target: "https://bank.uz", Type: store.TypeJWT, Severity: store.SevCritical,
 		Title: "JWT подписан слабым секретом", Detail: "секрет: secret"})
+	st.Add(store.Finding{Target: "api.nbu.uz", Type: store.TypeSubdomain, Severity: store.SevInfo,
+		Title: "Поддомен: жив (HTTP)", Tags: []string{"live", "http"}})
+	st.Add(store.Finding{Target: "nbu.uz", Type: store.TypeOSINT, Severity: store.SevInfo,
+		Title: "Найдено почт: 2", Tags: []string{"osint", "emails"}})
 	st.Close()
 
 	cfg := &config.Config{}
@@ -32,6 +36,14 @@ func TestGenerateIncludesChecklistAndDorks(t *testing.T) {
 	htmlDoc := readFile(t, path)
 	mdDoc := readFile(t, strings.TrimSuffix(path, ".html")+".md")
 
+	for _, want := range []string{"Поверхность атаки", "Живых поддоменов", "Почт (OSINT)"} {
+		if !strings.Contains(htmlDoc, want) {
+			t.Errorf("HTML-отчёт не содержит сводку поверхности %q", want)
+		}
+		if !strings.Contains(mdDoc, want) {
+			t.Errorf("MD-отчёт не содержит сводку поверхности %q", want)
+		}
+	}
 	for _, want := range []string{"Ручная проверка", "IDOR", "Transaction replay", "Mass assignment"} {
 		if !strings.Contains(htmlDoc, want) {
 			t.Errorf("HTML-отчёт не содержит чеклист-пункт %q", want)

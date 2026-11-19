@@ -88,6 +88,73 @@ func highlights(findings []store.Finding) (originsConfirmed, verifiedVulns, waf,
 	return
 }
 
+// surface — сводка поверхности атаки (что найдено по recon, даже без уязвимостей).
+type surface struct {
+	subsLive, subsResolve, subsDead int
+	http, ports, tech, emails, cdn  int
+}
+
+func computeSurface(findings []store.Finding) surface {
+	var s surface
+	for _, f := range findings {
+		has := func(tag string) bool {
+			for _, t := range f.Tags {
+				if t == tag {
+					return true
+				}
+			}
+			return false
+		}
+		switch f.Type {
+		case store.TypeSubdomain:
+			switch {
+			case has("live"):
+				s.subsLive++
+			case has("dead"):
+				s.subsDead++
+			default:
+				s.subsResolve++
+			}
+		case store.TypeHTTP:
+			s.http++
+		case store.TypePort:
+			s.ports++
+		case store.TypeTech:
+			if has("cdn") || has("waf") {
+				s.cdn++
+			} else {
+				s.tech++
+			}
+		case store.TypeOSINT:
+			if has("emails") {
+				s.emails++
+			}
+		}
+	}
+	return s
+}
+
+// surfaceItems возвращает подписи-значения для вывода (только ненулевые + поддомены).
+func surfaceItems(s surface) [][2]string {
+	var out [][2]string
+	add := func(lbl string, n int, always bool) {
+		if n > 0 || always {
+			out = append(out, [2]string{lbl, itoaReport(n)})
+		}
+	}
+	add("Живых поддоменов", s.subsLive, true)
+	add("Резолвятся (не отвечают)", s.subsResolve, false)
+	add("Мёртвых поддоменов", s.subsDead, false)
+	add("HTTP-сервисов", s.http, false)
+	add("Открытых портов", s.ports, false)
+	add("Технологий", s.tech, false)
+	add("За CDN/WAF", s.cdn, false)
+	add("Почт (OSINT)", s.emails, false)
+	return out
+}
+
+func itoaReport(n int) string { return fmt.Sprintf("%d", n) }
+
 func execSummary(findings []store.Finding, counts map[store.Severity]int) string {
 	oc, vv, _, em := highlights(findings)
 	var parts []string
@@ -132,6 +199,13 @@ func buildMarkdown(cfg *config.Config, findings []store.Finding, counts map[stor
 	b.WriteString("| Уровень | Кол-во |\n|---|---|\n")
 	for _, s := range sevOrder {
 		fmt.Fprintf(&b, "| %s | %d |\n", sevRu[s], counts[s])
+	}
+
+	if items := surfaceItems(computeSurface(findings)); len(items) > 0 {
+		b.WriteString("\n## Поверхность атаки\n\n")
+		for _, it := range items {
+			fmt.Fprintf(&b, "- **%s:** %s\n", it[0], it[1])
+		}
 	}
 	b.WriteString("\n## Находки\n\n")
 
@@ -205,6 +279,10 @@ h1{font-size:22px}h2{margin-top:32px;border-bottom:1px solid var(--line);padding
 .meta{color:var(--mut)}.summary{background:var(--card);border-radius:10px;padding:14px 16px;margin:16px 0;font-size:15px}
 .pills{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}
 .pill{padding:6px 12px;border-radius:999px;color:#fff;font-weight:600;font-size:13px}
+.surf{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:14px 0}
+.sc{background:var(--card);border-radius:10px;padding:13px 15px;border-left:3px solid #6366f1}
+.scn{font-size:23px;font-weight:800;line-height:1}
+.scl{color:var(--mut);font-size:12px;margin-top:4px}
 .f{background:var(--card);border-left:4px solid var(--line);border-radius:8px;padding:12px 14px;margin:10px 0}
 .f .t{font-weight:600}.f .tgt{color:var(--mut);font-family:ui-monospace,monospace;font-size:13px;word-break:break-all}
 .f .d{color:var(--mut);font-size:14px;margin-top:4px}.tag{display:inline-block;background:#334155;color:#cbd5e1;border-radius:4px;padding:1px 6px;font-size:12px;margin-right:4px}
@@ -226,6 +304,16 @@ details td.k{color:var(--mut);font-family:ui-monospace,monospace;word-break:brea
 		fmt.Fprintf(&b, `<span class="pill" style="background:%s">%s: %d</span>`, sevColor[s], sevRu[s], counts[s])
 	}
 	b.WriteString(`</div>`)
+
+	// Поверхность атаки — всегда полезная сводка recon, даже без уязвимостей.
+	if items := surfaceItems(computeSurface(findings)); len(items) > 0 {
+		b.WriteString(`<h2>Поверхность атаки</h2><div class="surf">`)
+		for _, it := range items {
+			fmt.Fprintf(&b, `<div class="sc"><div class="scn">%s</div><div class="scl">%s</div></div>`,
+				html.EscapeString(it[1]), html.EscapeString(it[0]))
+		}
+		b.WriteString(`</div>`)
+	}
 
 	// Значимые уровни — карточками.
 	for _, s := range sevOrder {
@@ -263,8 +351,12 @@ details td.k{color:var(--mut);font-family:ui-monospace,monospace;word-break:brea
 	if len(info) > 0 {
 		fmt.Fprintf(&b, "<h2>Разведка и инфо (%d)</h2>", len(info))
 		for _, grp := range byTypeGroups(info) {
-			fmt.Fprintf(&b, `<details><summary>%s (%d)</summary><table>`,
-				html.EscapeString(typeLabel(grp.typ)), len(grp.items))
+			op := "" // небольшие/важные группы раскрываем сразу, длинные (поддомены) — свёрнуты
+			if len(grp.items) <= 25 {
+				op = " open"
+			}
+			fmt.Fprintf(&b, `<details%s><summary>%s (%d)</summary><table>`,
+				op, html.EscapeString(typeLabel(grp.typ)), len(grp.items))
 			for _, f := range grp.items {
 				fmt.Fprintf(&b, `<tr><td class="k">%s</td><td>%s</td></tr>`,
 					html.EscapeString(f.Target), html.EscapeString(f.Title))

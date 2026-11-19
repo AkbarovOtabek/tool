@@ -53,7 +53,7 @@ body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 'Inter',system
   border-radius:10px;padding:9px 12px;font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:7px;transition:.14s}
 .theme-btn:hover{border-color:var(--accent)}
 .foot-note{font-size:10.5px;color:var(--mut);text-align:center;line-height:1.4}
-.main{flex:1;min-width:0;padding:26px 32px 72px;max-width:1240px}
+.main{flex:1;min-width:0;padding:24px 34px 56px;max-width:none}
 .page{display:none}.page.active{display:block;animation:fade .25s ease}
 @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
 .phead{font-size:22px;font-weight:800;letter-spacing:-.4px;margin:0 0 4px;display:flex;align-items:center;gap:9px}
@@ -236,23 +236,26 @@ a{color:var(--accent)}
           <label class="mod"><input type="checkbox" id="passive"><span class="body"><span class="name">🛡 Пассивно</span><span class="desc">Без портскана/nikto/инъекций — только тихая разведка.</span></span></label>
         </div>
         <input id="proxy" placeholder="свой SOCKS5: socks5://127.0.0.1:9050 (опц., вместо Tor)" style="margin-top:8px">
-        <label style="margin-top:12px">API-ключи OSINT (опц., для модуля «Утечки»)</label>
-        <input type="text" id="leakixKey" placeholder="LeakIX API-ключ (leakix.net)" style="margin-top:2px">
-        <input type="text" id="intelxKey" placeholder="IntelX API-ключ (intelx.io)" style="margin-top:6px">
-        <label style="margin-top:12px">Уведомления (опц., для модуля «Уведомления»)</label>
-        <input type="text" id="tgToken" placeholder="Telegram: токен бота (BotFather)" style="margin-top:2px">
-        <input type="text" id="tgChat" placeholder="Telegram: chat_id (твой id или группы)" style="margin-top:6px">
-        <input type="text" id="slackHook" placeholder="Slack Incoming Webhook URL" style="margin-top:6px">
-        <label style="margin-top:12px">Active Directory (опц., для модуля «Active Directory»)</label>
-        <div class="row" style="margin-top:2px;gap:6px">
-          <input type="text" id="adDomain" placeholder="домен (corp.local)" style="flex:1">
-          <input type="text" id="adDC" placeholder="IP контроллера домена" style="flex:1">
-        </div>
-        <div class="row" style="margin-top:6px;gap:6px">
-          <input type="text" id="adUser" placeholder="логин (опц.)" style="flex:1">
-          <input type="password" id="adPass" placeholder="пароль (опц.)" style="flex:1">
-        </div>
-        <input type="text" id="adUserlist" placeholder="путь к списку юзеров (для kerbrute/AS-REP)" style="margin-top:6px">
+        <details class="modbox" style="margin-top:14px">
+          <summary>Доп. настройки: ключи · уведомления · AD</summary>
+          <label style="margin-top:10px">API-ключи OSINT (для модуля «Утечки»)</label>
+          <input type="text" id="leakixKey" placeholder="LeakIX API-ключ (leakix.net)" style="margin-top:2px">
+          <input type="text" id="intelxKey" placeholder="IntelX API-ключ (intelx.io)" style="margin-top:6px">
+          <label style="margin-top:12px">Уведомления (для модуля «Уведомления»)</label>
+          <input type="text" id="tgToken" placeholder="Telegram: токен бота (BotFather)" style="margin-top:2px">
+          <input type="text" id="tgChat" placeholder="Telegram: chat_id (твой id или группы)" style="margin-top:6px">
+          <input type="text" id="slackHook" placeholder="Slack Incoming Webhook URL" style="margin-top:6px">
+          <label style="margin-top:12px">Active Directory (для модуля «Active Directory»)</label>
+          <div class="row" style="margin-top:2px;gap:6px">
+            <input type="text" id="adDomain" placeholder="домен (corp.local)" style="flex:1">
+            <input type="text" id="adDC" placeholder="IP контроллера домена" style="flex:1">
+          </div>
+          <div class="row" style="margin-top:6px;gap:6px">
+            <input type="text" id="adUser" placeholder="логин (опц.)" style="flex:1">
+            <input type="password" id="adPass" placeholder="пароль (опц.)" style="flex:1">
+          </div>
+          <input type="text" id="adUserlist" placeholder="путь к списку юзеров (для kerbrute/AS-REP)" style="margin-top:6px">
+        </details>
       </div>
 
       <div class="card">
