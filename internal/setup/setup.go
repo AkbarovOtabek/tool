@@ -65,6 +65,11 @@ var registry = []tool{
 	{"notify", []step{{kindGo, "github.com/projectdiscovery/notify/cmd/notify@latest"}}},
 	{"crlfuzz", []step{{kindGo, "github.com/dwisiswant0/crlfuzz/cmd/crlfuzz@latest"}}},
 	{"puredns", []step{{kindGo, "github.com/d3mondev/puredns/v2@latest"}}},
+	{"uncover", []step{{kindGo, "github.com/projectdiscovery/uncover/cmd/uncover@latest"}}},
+	{"cdncheck", []step{{kindGo, "github.com/projectdiscovery/cdncheck/cmd/cdncheck@latest"}}},
+	{"Gxss", []step{{kindGo, "github.com/KathanP19/Gxss@latest"}}},
+	{"trufflehog", []step{{kindGo, "github.com/trufflesecurity/trufflehog/v3@latest"}}},
+	{"gitleaks", []step{{kindGo, "github.com/gitleaks/gitleaks/v8@latest"}}},
 
 	// --- apt-тулы (нужен root/sudo); где есть — с go/pipx-фолбэком ---
 	{"nmap", []step{{kindApt, "nmap"}}},
@@ -87,9 +92,12 @@ var registry = []tool{
 	{"arjun", []step{{kindPipx, "arjun"}}},
 	{"paramspider", []step{{kindPipx, "git+https://github.com/devanshbatham/paramspider"}}},
 	{"ghauri", []step{{kindPipx, "git+https://github.com/r0oth3x49/ghauri"}}},
+	{"dnsgen", []step{{kindPipx, "dnsgen"}}},
 	{"jwt_tool", []step{{kindSh, jwtToolInstall}}},
-	// x8 — быстрый фаззер скрытых параметров (Rust); ставится через cargo, если он есть.
-	{"x8", []step{{kindSh, x8Install}}},
+	{"oralyzer", []step{{kindSh, oralyzerInstall}}},
+	// Rust-тулы (через cargo, если он есть).
+	{"x8", []step{{kindSh, cargoInstall("x8", "x8")}}},
+	{"rustscan", []step{{kindSh, cargoInstall("rustscan", "rustscan")}}},
 }
 
 // prereqApt — пакеты, нужные для сборки/установки прочих тулов (ставим одним махом).
@@ -103,13 +111,25 @@ mkdir -p "$HOME/.local/bin"
 printf '#!/bin/sh\nexec python3 "%s/jwt_tool.py" "$@"\n' "$DIR" > "$HOME/.local/bin/jwt_tool"
 chmod +x "$HOME/.local/bin/jwt_tool"`
 
-const x8Install = `set -e
+// cargoInstall собирает shell-шаг установки Rust-крейта через cargo.
+func cargoInstall(bin, crate string) string {
+	return `set -e
 if command -v cargo >/dev/null 2>&1; then
-  cargo install x8
+  cargo install ` + crate + `
 else
-  echo "cargo не установлен — x8 пропущен (поставь rust: apt install -y cargo, затем cargo install x8)"
+  echo "cargo не установлен — ` + bin + ` пропущен (apt install -y cargo, затем cargo install ` + crate + `)"
   exit 1
 fi`
+}
+
+// oralyzerInstall ставит Oralyzer (open redirect) из git и кладёт обёртку в PATH.
+const oralyzerInstall = `set -e
+DIR="$HOME/.local/share/oralyzer"
+[ -d "$DIR/.git" ] || git clone --depth 1 https://github.com/r0075h3ll/Oralyzer "$DIR"
+python3 -m pip install --user --quiet -r "$DIR/requirements.txt" 2>/dev/null || true
+mkdir -p "$HOME/.local/bin"
+printf '#!/bin/sh\nexec python3 "%s/oralyzer.py" "$@"\n' "$DIR" > "$HOME/.local/bin/oralyzer"
+chmod +x "$HOME/.local/bin/oralyzer"`
 
 // Summary — итог установки.
 type Summary struct {

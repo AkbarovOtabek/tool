@@ -55,11 +55,28 @@ func BruteSubdomains(ctx context.Context, cfg *config.Config, sc *scope.Scope, r
 			add(set, sc, h)
 		}
 	}
+
+	// dnsgen: перестановки из найденного → ещё один проход резолва puredns.
+	if rn.Has("dnsgen") && len(set) > 0 {
+		seed := make([]string, 0, len(set))
+		for h := range set {
+			seed = append(seed, h)
+		}
+		dg := rn.RunStdin(ctx, strings.Join(seed, "\n"), "dnsgen", "-")
+		if len(dg.Lines) > 0 {
+			ev.Logf("  dnsgen: перестановок %d — резолвлю...\n", len(dg.Lines))
+			pr := rn.RunStdin(ctx, strings.Join(dg.Lines, "\n"), "puredns", "resolve", "-r", resolvers, "-q", "--skip-wildcard-filter")
+			for _, h := range pr.Lines {
+				add(set, sc, h)
+			}
+		}
+	}
+
 	out := make([]string, 0, len(set))
 	for h := range set {
 		out = append(out, h)
 		st.Add(store.Finding{Target: h, Type: store.TypeSubdomain, Severity: store.SevInfo,
-			Title: "Поддомен: жив (брут)", Detail: "найден брутом и резолвится",
+			Title: "Поддомен: жив (брут)", Detail: "найден брутом/перестановкой и резолвится",
 			Tool: "puredns", Tags: []string{"live", "brute", "resolves"}})
 	}
 	if len(out) > 0 {
@@ -128,6 +145,34 @@ func add(set map[string]bool, sc *scope.Scope, h string) {
 	if h != "" && sc.InScope(h) {
 		set[h] = true
 	}
+}
+
+// Uncover ищет хосты через Shodan по домену (uncover). Нужен ключ Shodan.
+// Запросы идут к Shodan, а не к цели — пассивное расширение поверхности.
+func Uncover(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Runner, st *store.Store, ev event.Sink, domains []string) []string {
+	if !rn.Has("uncover") || cfg.Keys.Shodan == "" {
+		return nil
+	}
+	os.Setenv("SHODAN_API_KEY", cfg.Keys.Shodan)
+	set := map[string]bool{}
+	for _, d := range domains {
+		r := rn.Run(ctx, "uncover", "-shodan", "ssl:\""+d+"\"", "-silent")
+		for _, line := range r.Lines {
+			h := strings.TrimSpace(line)
+			if i := strings.LastIndexByte(h, ':'); i >= 0 { // host:port -> host
+				h = h[:i]
+			}
+			add(set, sc, h)
+		}
+	}
+	out := make([]string, 0, len(set))
+	for h := range set {
+		out = append(out, h)
+	}
+	if len(out) > 0 {
+		ev.Logf("  uncover (Shodan): доп. хостов в скоупе: %d\n", len(out))
+	}
+	return out
 }
 
 // Fingerprint снимает отпечаток технологий (whatweb) и определяет WAF (wafw00f).

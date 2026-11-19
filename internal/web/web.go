@@ -517,3 +517,65 @@ func Ghauri(ctx context.Context, rn *runner.Runner, st *store.Store, ev event.Si
 		}
 	}
 }
+
+// Gxss ищет параметры, значение которых отражается в ответе (кандидаты на XSS).
+// Дополняет dalfox: сначала сужаем до реально отражающихся точек.
+func Gxss(ctx context.Context, rn *runner.Runner, st *store.Store, ev event.Sink, urls []string) {
+	if !rn.Has("Gxss") || len(urls) == 0 {
+		return
+	}
+	if len(urls) > 500 {
+		urls = urls[:500]
+	}
+	args := []string{"-c", "30"}
+	if rn.Stealthy() {
+		args = []string{"-c", "5"}
+	}
+	ev.Logf("  Gxss: проверяю отражение в %d URL...\n", len(urls))
+	r := rn.RunStdin(ctx, strings.Join(urls, "\n"), "Gxss", args...)
+	n := 0
+	for _, line := range r.Lines {
+		l := strings.TrimSpace(line)
+		if !strings.Contains(l, "http") {
+			continue
+		}
+		// Gxss печатает "URL ... Vulnerable" / "reflection found" — берём URL.
+		u := l
+		if i := strings.Index(l, "http"); i > 0 {
+			u = l[i:]
+		}
+		if sp := strings.IndexByte(u, ' '); sp > 0 {
+			u = u[:sp]
+		}
+		if st.Add(store.Finding{Target: u, Type: store.TypeParam, Severity: store.SevLow,
+			Title: "Отражение параметра (кандидат на XSS)", Evidence: trimLine(l, 200),
+			Tool: "Gxss", Tags: []string{"xss", "reflection", "requires-review"}}) {
+			n++
+		}
+	}
+	if n > 0 {
+		ev.Logf("  Gxss: отражающихся точек %d\n", n)
+	}
+}
+
+// Oralyzer проверяет открытые редиректы по URL-кандидатам (gf redirect).
+func Oralyzer(ctx context.Context, rn *runner.Runner, st *store.Store, ev event.Sink, urls []string) {
+	if !rn.Has("oralyzer") || len(urls) == 0 {
+		return
+	}
+	if len(urls) > 60 {
+		urls = urls[:60]
+	}
+	ev.Logf("  oralyzer: проверяю %d URL на open redirect...\n", len(urls))
+	for _, u := range urls {
+		r := rn.Run(ctx, "oralyzer", "-u", u)
+		for _, line := range r.Lines {
+			low := strings.ToLower(line)
+			if strings.Contains(low, "vulnerable") || strings.Contains(low, "redirect") && strings.Contains(low, "found") {
+				st.Add(store.Finding{Target: u, Type: store.TypeInjection, Severity: store.SevMedium,
+					Title: "Открытый редирект (open redirect)", Evidence: trimLine(strings.TrimSpace(line), 250),
+					Tool: "oralyzer", Tags: []string{"open-redirect", "requires-review"}})
+			}
+		}
+	}
+}

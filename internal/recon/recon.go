@@ -94,8 +94,12 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 		}(d)
 	}
 	wgSub.Wait()
-	// Пассивное расширение поверхности: amass + assetfinder.
+	// Пассивное расширение поверхности: amass + assetfinder + tlsx.
 	for _, h := range analyze.ExtraSubdomains(ctx, rn, sc, ev, sc.Domains()) {
+		subSet[strings.ToLower(h)] = true
+	}
+	// uncover (Shodan) — ещё хосты по ключу, если он задан.
+	for _, h := range analyze.Uncover(ctx, cfg, sc, rn, st, ev, sc.Domains()) {
 		subSet[strings.ToLower(h)] = true
 	}
 	for h := range subSet {
@@ -217,10 +221,54 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 		ev.Logln("  ! httpx не установлен — пропускаю HTTP-пробинг")
 	}
 
-	// 5. Живость поддоменов: пишем находку по каждому с явным статусом.
+	// 5. Классификация CDN/WAF (cdncheck) — чтобы знать, где фронт за CDN.
+	cdnCheck(ctx, rn, st, ev, res)
+
+	// 6. Живость поддоменов: пишем находку по каждому с явным статусом.
 	emitSubdomains(ctx, rn, st, ev, res, httpByHost)
 
 	return res, nil
+}
+
+// cdnCheck классифицирует резолвящиеся хосты как CDN/WAF/cloud (cdncheck).
+func cdnCheck(ctx context.Context, rn *runner.Runner, st *store.Store, ev event.Sink, res *Result) {
+	if !rn.Has("cdncheck") || len(res.Resolved) == 0 {
+		return
+	}
+	var hosts []string
+	for h := range res.Resolved {
+		hosts = append(hosts, h)
+	}
+	r := rn.RunStdin(ctx, strings.Join(hosts, "\n"), "cdncheck", "-json", "-silent")
+	n := 0
+	for _, line := range r.Lines {
+		var d struct {
+			Input   string `json:"input"`
+			CDN     bool   `json:"cdn"`
+			CDNName string `json:"cdn_name"`
+			WAF     bool   `json:"waf"`
+			WAFName string `json:"waf_name"`
+		}
+		if json.Unmarshal([]byte(line), &d) != nil || d.Input == "" {
+			continue
+		}
+		var what, name string
+		switch {
+		case d.WAF:
+			what, name = "WAF", d.WAFName
+		case d.CDN:
+			what, name = "CDN", d.CDNName
+		default:
+			continue
+		}
+		st.Add(store.Finding{Target: d.Input, Type: store.TypeTech, Severity: store.SevInfo,
+			Title: "За " + what + ": " + name, Detail: "учти при тестировании (фронт за " + what + ")",
+			Tool: "cdncheck", Tags: []string{strings.ToLower(what)}})
+		n++
+	}
+	if n > 0 {
+		ev.Logf("  cdncheck: за CDN/WAF хостов: %d\n", n)
+	}
 }
 
 // emitSubdomains добавляет находку по каждому поддомену с явным признаком

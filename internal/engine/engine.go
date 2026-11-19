@@ -224,6 +224,9 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 		web.DalfoxPipe(ctx, rn, st, ev, cand.XSS)
 		// CRLF-инъекции по параметризованным URL (crlfuzz, если установлен).
 		web.CRLFuzz(ctx, rn, st, ev, injectionURLs(cand))
+		// Отражение параметров (Gxss) и открытые редиректы (oralyzer).
+		web.Gxss(ctx, rn, st, ev, cand.XSS)
+		web.Oralyzer(ctx, rn, st, ev, cand.Redirect)
 		if opts.SQLi {
 			// Активный DAST-фаззинг по реальным точкам входа, а не по главным страницам.
 			web.DASTOnURLs(ctx, rn, st, ev, injectionURLs(cand))
