@@ -9,16 +9,64 @@ package analyze
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 
+	"pentkit/internal/config"
 	"pentkit/internal/event"
 	"pentkit/internal/runner"
 	"pentkit/internal/scope"
 	"pentkit/internal/store"
 )
+
+// defaultResolvers — публичные DNS-резолверы для puredns, если своих нет.
+const defaultResolvers = "1.1.1.1\n8.8.8.8\n9.9.9.9\n8.8.4.4\n1.0.0.1\n208.67.222.222\n"
+
+// BruteSubdomains — активный перебор поддоменов по словарю (puredns + massdns).
+// puredns валидирует каждый кандидат через резолверы, поэтому возвращает только
+// реально резолвящиеся хосты. Нужны puredns, massdns и словарь (cfg.Wordlists.Subs).
+func BruteSubdomains(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Runner, st *store.Store, ev event.Sink, engDir string, domains []string) []string {
+	if rn.Passive {
+		ev.Logln("  пассивный режим: брут поддоменов (puredns) пропущен")
+		return nil
+	}
+	if !rn.Has("puredns") || !rn.Has("massdns") {
+		ev.Logln("  ! puredns/massdns не установлены — пропускаю брут поддоменов")
+		return nil
+	}
+	wl := cfg.Wordlists.Subs
+	if wl == "" {
+		ev.Logln("  ! не задан словарь поддоменов (config.wordlists.subs) — пропускаю брут")
+		return nil
+	}
+	resolvers := filepath.Join(engDir, "resolvers.txt")
+	if _, err := os.Stat(resolvers); err != nil {
+		_ = os.WriteFile(resolvers, []byte(defaultResolvers), 0o640)
+	}
+	set := map[string]bool{}
+	for _, d := range domains {
+		ev.Logf("  puredns: брут поддоменов %s по словарю...\n", d)
+		r := rn.Run(ctx, "puredns", "bruteforce", wl, d, "-r", resolvers, "-q", "--skip-wildcard-filter")
+		for _, h := range r.Lines {
+			add(set, sc, h)
+		}
+	}
+	out := make([]string, 0, len(set))
+	for h := range set {
+		out = append(out, h)
+		st.Add(store.Finding{Target: h, Type: store.TypeSubdomain, Severity: store.SevInfo,
+			Title: "Поддомен: жив (брут)", Detail: "найден брутом и резолвится",
+			Tool: "puredns", Tags: []string{"live", "brute", "resolves"}})
+	}
+	if len(out) > 0 {
+		ev.Logf("  puredns: доп. резолвящихся поддоменов: %d\n", len(out))
+	}
+	return out
+}
 
 const (
 	maxFingerprint = 40
@@ -57,6 +105,11 @@ func ExtraSubdomains(ctx context.Context, rn *runner.Runner, sc *scope.Scope, ev
 			// findomain — быстрый пассивный сборщик из десятков источников.
 			wg.Add(1)
 			go run("findomain", "-t", d, "-q")
+		}
+		if rn.Has("tlsx") {
+			// tlsx — поддомены из SAN TLS-сертификата (ещё один пассивный источник).
+			wg.Add(1)
+			go run("tlsx", "-u", d, "-san", "-silent", "-resp-only")
 		}
 	}
 	wg.Wait()
@@ -106,7 +159,7 @@ func Fingerprint(ctx context.Context, rn *runner.Runner, st *store.Store, ev eve
 					st.Add(store.Finding{Target: u, Type: store.TypeWAF, Severity: store.SevInfo,
 						Title: "Обнаружен WAF", Detail: strings.TrimSpace(line),
 						Evidence: "учитывай WAF при тестировании (возможны ложные блокировки/обходы)",
-						Tool: "wafw00f", Tags: []string{"waf"}})
+						Tool:     "wafw00f", Tags: []string{"waf"}})
 					ev.Logf("  wafw00f %s: %s\n", u, strings.TrimSpace(line))
 				}
 			}
@@ -137,7 +190,7 @@ func WordPress(ctx context.Context, rn *runner.Runner, st *store.Store, ev event
 				}
 				st.Add(store.Finding{Target: u, Type: store.TypeVuln, Severity: sev,
 					Title: "WordPress: " + trim(strings.TrimPrefix(l, "[!]"), 120),
-					Tool: "wpscan", Tags: []string{"wordpress", "requires-review"}})
+					Tool:  "wpscan", Tags: []string{"wordpress", "requires-review"}})
 				n++
 			}
 		}
@@ -171,10 +224,10 @@ func OSINT(ctx context.Context, rn *runner.Runner, st *store.Store, ev event.Sin
 			list = append(list, e)
 		}
 		st.Add(store.Finding{Target: d, Type: store.TypeOSINT, Severity: store.SevInfo,
-			Title:  "Найдено почт: " + strconv.Itoa(len(list)),
-			Detail: strings.Join(list, ", "),
+			Title:    "Найдено почт: " + strconv.Itoa(len(list)),
+			Detail:   strings.Join(list, ", "),
 			Evidence: "потенциальные цели для фишинга/перебора — учти в отчёте",
-			Tool: "theHarvester", Tags: []string{"osint", "emails"}})
+			Tool:     "theHarvester", Tags: []string{"osint", "emails"}})
 		ev.Logf("  theHarvester %s: почт %d\n", d, len(list))
 	}
 }

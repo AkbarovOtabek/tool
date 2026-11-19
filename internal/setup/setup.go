@@ -60,6 +60,11 @@ var registry = []tool{
 	{"gowitness", []step{{kindGo, "github.com/sensepost/gowitness@latest"}}},
 	{"ffuf", []step{{kindGo, "github.com/ffuf/ffuf/v2@latest"}}},
 	{"kr", []step{{kindGo, "github.com/assetnote/kiterunner/cmd/kr@latest"}}},
+	{"tlsx", []step{{kindGo, "github.com/projectdiscovery/tlsx/cmd/tlsx@latest"}}},
+	{"interactsh-client", []step{{kindGo, "github.com/projectdiscovery/interactsh/cmd/interactsh-client@latest"}}},
+	{"notify", []step{{kindGo, "github.com/projectdiscovery/notify/cmd/notify@latest"}}},
+	{"crlfuzz", []step{{kindGo, "github.com/dwisiswant0/crlfuzz/cmd/crlfuzz@latest"}}},
+	{"puredns", []step{{kindGo, "github.com/d3mondev/puredns/v2@latest"}}},
 
 	// --- apt-тулы (нужен root/sudo); где есть — с go/pipx-фолбэком ---
 	{"nmap", []step{{kindApt, "nmap"}}},
@@ -69,6 +74,7 @@ var registry = []tool{
 	{"wpscan", []step{{kindApt, "wpscan"}}},
 	{"findomain", []step{{kindApt, "findomain"}}},
 	{"feroxbuster", []step{{kindApt, "feroxbuster"}}},
+	{"massdns", []step{{kindApt, "massdns"}}},
 	{"searchsploit", []step{{kindApt, "exploitdb"}}},
 	{"msfconsole", []step{{kindApt, "metasploit-framework"}}},
 	{"testssl.sh", []step{{kindApt, "testssl.sh"}}},
@@ -79,7 +85,11 @@ var registry = []tool{
 
 	// --- Python/git-тулы ---
 	{"arjun", []step{{kindPipx, "arjun"}}},
+	{"paramspider", []step{{kindPipx, "git+https://github.com/devanshbatham/paramspider"}}},
+	{"ghauri", []step{{kindPipx, "git+https://github.com/r0oth3x49/ghauri"}}},
 	{"jwt_tool", []step{{kindSh, jwtToolInstall}}},
+	// x8 — быстрый фаззер скрытых параметров (Rust); ставится через cargo, если он есть.
+	{"x8", []step{{kindSh, x8Install}}},
 }
 
 // prereqApt — пакеты, нужные для сборки/установки прочих тулов (ставим одним махом).
@@ -92,6 +102,14 @@ python3 -m pip install --user --quiet termcolor cryptography pycryptodomex reque
 mkdir -p "$HOME/.local/bin"
 printf '#!/bin/sh\nexec python3 "%s/jwt_tool.py" "$@"\n' "$DIR" > "$HOME/.local/bin/jwt_tool"
 chmod +x "$HOME/.local/bin/jwt_tool"`
+
+const x8Install = `set -e
+if command -v cargo >/dev/null 2>&1; then
+  cargo install x8
+else
+  echo "cargo не установлен — x8 пропущен (поставь rust: apt install -y cargo, затем cargo install x8)"
+  exit 1
+fi`
 
 // Summary — итог установки.
 type Summary struct {

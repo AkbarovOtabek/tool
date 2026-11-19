@@ -5,13 +5,16 @@ package recon
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"pentkit/internal/analyze"
 	"pentkit/internal/config"
 	"pentkit/internal/event"
+	"pentkit/internal/netx"
 	"pentkit/internal/runner"
 	"pentkit/internal/scope"
 	"pentkit/internal/store"
@@ -99,10 +102,8 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 		res.Subdomains = append(res.Subdomains, h)
 	}
 	sort.Strings(res.Subdomains)
-	for _, h := range res.Subdomains {
-		st.Add(store.Finding{Target: h, Type: store.TypeSubdomain, Severity: store.SevInfo,
-			Title: "Поддомен в скоупе", Tool: "subfinder"})
-	}
+	// Находки по поддоменам добавляем НЕ здесь, а в конце (emitSubdomains) —
+	// когда уже известна их живость (резолв + HTTP + TCP-проба).
 	ev.Logf("  поддоменов в скоупе: %d\n", len(res.Subdomains))
 	if len(res.Subdomains) == 0 {
 		return res, nil
@@ -175,6 +176,7 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 	}
 
 	// 4. HTTP + технологии (httpx).
+	httpByHost := map[string]HTTPService{} // host (без порта) -> живой HTTP-сервис
 	if rn.Has("httpx") {
 		httpxArgs := []string{"-silent", "-json", "-title", "-tech-detect", "-status-code", "-web-server", "-a"}
 		if rn.Stealthy() {
@@ -197,6 +199,11 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 				svc.IP = h.A[0]
 			}
 			res.HTTP = append(res.HTTP, svc)
+			if hn := hostOnly(h.Host); hn != "" {
+				if _, ok := httpByHost[hn]; !ok {
+					httpByHost[hn] = svc
+				}
+			}
 			st.Add(store.Finding{Target: h.URL, Type: store.TypeHTTP, Severity: store.SevInfo,
 				Title:  "HTTP " + itoa(h.StatusCode) + " — " + h.Title,
 				Detail: "server: " + h.Webserver, Tool: "httpx"})
@@ -210,7 +217,124 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 		ev.Logln("  ! httpx не установлен — пропускаю HTTP-пробинг")
 	}
 
+	// 5. Живость поддоменов: пишем находку по каждому с явным статусом.
+	emitSubdomains(ctx, rn, st, ev, res, httpByHost)
+
 	return res, nil
+}
+
+// emitSubdomains добавляет находку по каждому поддомену с явным признаком
+// живости: отвечает по HTTP / открыт TCP-порт / только резолвится / мёртвый.
+// Для хостов без HTTP-ответа делает лёгкую TCP-пробу 443 и 80 («пинг»).
+func emitSubdomains(ctx context.Context, rn *runner.Runner, st *store.Store, ev event.Sink, res *Result, httpByHost map[string]HTTPService) {
+	var live, resolvesOnly, dead int
+	// TCP-пробы распараллелим: это независимые короткие соединения.
+	type probeRes struct {
+		host string
+		port string
+	}
+	sem := make(chan struct{}, 20)
+	results := make(chan probeRes, len(res.Subdomains))
+	var wg sync.WaitGroup
+
+	for _, h := range res.Subdomains {
+		if _, ok := httpByHost[h]; ok {
+			continue // уже знаем, что жив по HTTP
+		}
+		if rn.Passive {
+			continue // активная TCP-проба запрещена в пассивном режиме
+		}
+		if _, resolves := res.Resolved[h]; !resolves && len(res.Resolved) > 0 {
+			continue // не резолвится — пробовать порты бессмысленно
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(h string) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			if port := tcpAlive(ctx, rn, h); port != "" {
+				results <- probeRes{h, port}
+			}
+		}(h)
+	}
+	go func() { wg.Wait(); close(results) }()
+	tcpOpen := map[string]string{}
+	for r := range results {
+		tcpOpen[r.host] = r.port
+	}
+
+	for _, h := range res.Subdomains {
+		var detail, status string
+		var tags []string
+		if svc, ok := httpByHost[h]; ok {
+			status = "жив (HTTP)"
+			detail = "HTTP " + itoa(svc.Status)
+			if svc.Title != "" {
+				detail += " — " + svc.Title
+			}
+			if svc.IP != "" {
+				detail += " · " + svc.IP
+			}
+			tags = []string{"live", "http"}
+			live++
+		} else if port, ok := tcpOpen[h]; ok {
+			status = "жив (TCP)"
+			detail = "порт " + port + " открыт"
+			if ip := res.Resolved[h]; ip != "" {
+				detail += " · " + ip
+			}
+			detail += " (HTTP-баннера нет)"
+			tags = []string{"live", "tcp"}
+			live++
+		} else if ip, ok := res.Resolved[h]; ok {
+			status = "не отвечает"
+			detail = "резолвится в " + ip + ", но HTTP/443/80 закрыты"
+			tags = []string{"resolves", "no-response"}
+			resolvesOnly++
+		} else {
+			status = "мёртвый"
+			detail = "не резолвится (нет A-записи)"
+			tags = []string{"dead"}
+			dead++
+		}
+		st.Add(store.Finding{Target: h, Type: store.TypeSubdomain, Severity: store.SevInfo,
+			Title: "Поддомен: " + status, Detail: detail, Tool: "recon", Tags: tags})
+	}
+	ev.Logf("  поддомены — живых: %d, только резолв: %d, мёртвых: %d\n", live, resolvesOnly, dead)
+}
+
+// tcpAlive пробует подключиться к 443 и 80 (с учётом Tor/SOCKS). Возвращает
+// открытый порт или "". Это лёгкая «пинг»-проверка живости без внешних тулов.
+func tcpAlive(ctx context.Context, rn *runner.Runner, host string) string {
+	for _, port := range []string{"443", "80"} {
+		cctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+		var conn net.Conn
+		var err error
+		addr := net.JoinHostPort(host, port)
+		if rn.SOCKS != "" {
+			conn, err = netx.NewDialer(rn.SOCKS, 4*time.Second).DialContext(cctx, "tcp", addr)
+		} else {
+			conn, err = (&net.Dialer{Timeout: 4 * time.Second}).DialContext(cctx, "tcp", addr)
+		}
+		cancel()
+		if err == nil {
+			conn.Close()
+			return port
+		}
+	}
+	return ""
+}
+
+// hostOnly убирает порт из "host:port".
+func hostOnly(h string) string {
+	h = strings.TrimSpace(strings.ToLower(h))
+	if i := strings.LastIndexByte(h, ':'); i >= 0 {
+		// не трогаем IPv6 в скобках; httpx host обычно hostname[:port]
+		if !strings.Contains(h, "]") {
+			h = h[:i]
+		}
+	}
+	return h
 }
 
 func itoa(n int) string {

@@ -61,9 +61,9 @@ func Run(ctx context.Context, cfg *config.Config, rn *runner.Runner, st *store.S
 		go func(t Target) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			headerAudit(ctx, st, client, t.URL)   // пассивно, встроенный клиент
-			corsAudit(ctx, st, client, t.URL)     // пассивно: мисконфигурация CORS
-			dirScan(ctx, cfg, rn, st, ev, t.URL)  // feroxbuster/ffuf
+			headerAudit(ctx, st, client, t.URL)              // пассивно, встроенный клиент
+			corsAudit(ctx, st, client, t.URL)                // пассивно: мисконфигурация CORS
+			dirScan(ctx, cfg, rn, st, ev, t.URL)             // feroxbuster/ffuf
 			params := paramScan(ctx, cfg, rn, st, ev, t.URL) // arjun + dalfox
 			if activeInjection {
 				sqliScan(ctx, rn, st, ev, t.URL, params)
@@ -119,7 +119,7 @@ func headerAudit(ctx context.Context, st *store.Store, client *http.Client, u st
 		if v := resp.Header.Get(h); v != "" && hasVersion(v) {
 			st.Add(store.Finding{Target: u, Type: store.TypeHeader, Severity: store.SevInfo,
 				Title: "Раскрытие версии в заголовке " + h + ": " + v,
-				Tool: "pentkit", Tags: []string{"info-disclosure", "passive"}})
+				Tool:  "pentkit", Tags: []string{"info-disclosure", "passive"}})
 		}
 	}
 }
@@ -429,4 +429,91 @@ func trimLine(s string, n int) string {
 		return s[:n] + "…"
 	}
 	return s
+}
+
+// CRLFuzz проверяет параметризованные URL на CRLF-инъекции (внешний crlfuzz).
+func CRLFuzz(ctx context.Context, rn *runner.Runner, st *store.Store, ev event.Sink, urls []string) {
+	if !rn.Has("crlfuzz") {
+		if len(urls) > 0 {
+			ev.Logln("  ! crlfuzz не установлен — пропускаю CRLF (go install github.com/dwisiswant0/crlfuzz/cmd/crlfuzz@latest)")
+		}
+		return
+	}
+	if len(urls) == 0 {
+		return
+	}
+	if len(urls) > 300 {
+		urls = urls[:300]
+	}
+	args := []string{"-s", "-c", "15"}
+	if rn.Stealthy() {
+		args = []string{"-s", "-c", "5", "-d", "200"}
+	}
+	ev.Logf("  crlfuzz: проверяю %d URL на CRLF-инъекции...\n", len(urls))
+	r := rn.RunStdin(ctx, strings.Join(urls, "\n"), "crlfuzz", args...)
+	n := 0
+	for _, line := range r.Lines {
+		l := strings.TrimSpace(line)
+		if !strings.HasPrefix(l, "http") {
+			continue
+		}
+		if st.Add(store.Finding{Target: l, Type: store.TypeInjection, Severity: store.SevMedium,
+			Title: "Возможная CRLF-инъекция", Evidence: trimLine(l, 300),
+			Tool: "crlfuzz", Tags: []string{"crlf", "requires-review"}}) {
+			n++
+		}
+	}
+	if n > 0 {
+		ev.Logf("  crlfuzz: находок %d\n", n)
+	}
+}
+
+// X8 фаззит скрытые параметры (внешний x8). Нужен словарь имён параметров
+// (cfg.Wordlists.Params); без него пропускаем. Активная проверка.
+func X8(ctx context.Context, cfg *config.Config, rn *runner.Runner, st *store.Store, ev event.Sink, urls []string) {
+	if !rn.Has("x8") {
+		return
+	}
+	wl := cfg.Wordlists.Params
+	if wl == "" {
+		ev.Logln("  ! x8: не задан словарь параметров (config.wordlists.params) — пропускаю")
+		return
+	}
+	if len(urls) > 15 {
+		urls = urls[:15]
+	}
+	for _, u := range urls {
+		r := rn.Run(ctx, "x8", "-u", u, "-w", wl, "-O", "json")
+		for _, line := range r.Lines {
+			l := strings.TrimSpace(line)
+			if strings.Contains(l, "found") || strings.Contains(strings.ToLower(l), "param") {
+				st.Add(store.Finding{Target: u, Type: store.TypeParam, Severity: store.SevInfo,
+					Title: "x8: скрытый параметр", Evidence: trimLine(l, 200),
+					Tool: "x8", Tags: []string{"param", "hidden"}})
+			}
+		}
+	}
+}
+
+// Ghauri — альтернативный движок SQL-инъекций (быстрее sqlmap на части кейсов).
+// Активная проверка: вызывается только в SQLi-режиме.
+func Ghauri(ctx context.Context, rn *runner.Runner, st *store.Store, ev event.Sink, urls []string) {
+	if !rn.Has("ghauri") {
+		return
+	}
+	if len(urls) > 10 {
+		urls = urls[:10]
+	}
+	ev.Logf("  ghauri: проверяю %d URL на SQLi...\n", len(urls))
+	for _, u := range urls {
+		r := rn.Run(ctx, "ghauri", "-u", u, "--batch", "--level", "1")
+		for _, line := range r.Lines {
+			low := strings.ToLower(line)
+			if strings.Contains(low, "injectable") || strings.Contains(low, "parameter") && strings.Contains(low, "vulnerable") {
+				st.Add(store.Finding{Target: u, Type: store.TypeInjection, Severity: store.SevHigh,
+					Title: "SQL-инъекция (ghauri)", Evidence: trimLine(strings.TrimSpace(line), 300),
+					Tool: "ghauri", Tags: []string{"sqli", "requires-review"}})
+			}
+		}
+	}
 }

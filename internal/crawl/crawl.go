@@ -71,6 +71,22 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 		ev.Logf("  waybackurls: добавлено URL %d\n", len(set)-before)
 	}
 
+	// 4. paramspider — URL с параметрами из архивов (прицельно на точки инъекций).
+	if rn.Has("paramspider") {
+		before := len(set)
+		for _, d := range sc.Domains() {
+			r := rn.Run(ctx, "paramspider", "-d", d, "--subs", "-o", "/dev/stdout")
+			for _, line := range r.Lines {
+				if strings.HasPrefix(strings.TrimSpace(line), "http") {
+					add(line)
+				}
+			}
+		}
+		if n := len(set) - before; n > 0 {
+			ev.Logf("  paramspider: добавлено URL %d\n", n)
+		}
+	}
+
 	out := make([]string, 0, len(set))
 	for u := range set {
 		out = append(out, u)

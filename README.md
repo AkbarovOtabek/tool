@@ -150,6 +150,12 @@ naabu требует `libpcap-dev`. seclists нужен для словарей 
 | authtest (⚠) | встроенный | активная проверка отсутствия rate-limit на `/login`,`/reset` (серия ложных логинов, по согласованию) |
 | leaks | встроенный (ключи LeakIX/IntelX) | пассивный OSINT по базам утечек: открытые сервисы/конфиги (leakix.net), слитые данные/credentials (intelx.io) |
 | smuggle (⚠) | встроенный | timing-детект HTTP request smuggling (CL.TE/TE.CL) — рискованно, по согласованию; находка = кандидат на ручную проверку |
+| brutedns | puredns + massdns | активный перебор поддоменов по словарю; возвращает только живые (резолвятся) |
+| notify | встроенный | сводка крит/high находок в Telegram/Slack/Discord по завершении (config.notify) |
+
+Авто-тулы (подхватываются, если установлены, в рамках модулей выше): **tlsx** (поддомены из TLS-сертификатов, в recon), **paramspider** (URL с параметрами из архивов, в crawl), **crlfuzz** (CRLF-инъекции, в web), **x8** (скрытые параметры, в web при SQLi), **ghauri** (альтернативный SQLi-движок к sqlmap, при SQLi), **interactsh-client** (OAST для слепых уязвимостей — nuclei использует по умолчанию).
+
+**Живость поддоменов:** каждый поддомен в находках помечен явно — `жив (HTTP)` (есть ответ + статус/IP), `жив (TCP)` (встроенная проба 443/80, баннера нет), `не отвечает` (резолвится, но порты закрыты) или `мёртвый` (нет A-записи). Не нужно гадать, работает хост или нет.
 | vuln | nuclei | уязвимости по шаблонам + отсев ложных + перепроверка (в stealth добавляет `X-Forwarded-For: 127.0.0.1` для обхода WAF) |
 | web | feroxbuster/ffuf, arjun, dalfox, встроенный клиент | рекурсивный дирбаст, параметры, XSS (+dalfox pipe по gf), CORS-мисконфиг, security-заголовки |
 | sqli (⚠) | sqlmap, nuclei -dast | активные SQL-инъекции и DAST-фаззинг по gf-кандидатам (по согласованию) |
@@ -311,6 +317,7 @@ internal/exposure       открытые .git/.env/actuator/swagger/бэкапы
 internal/apisec         JWT (alg:none/слабый секрет/RS256→HS256) / обход 401-403 / kiterunner / rate-limit входа
 internal/leaks          OSINT по базам утечек LeakIX / IntelX (нужны ключи)
 internal/smuggle        timing-детект HTTP request smuggling (CL.TE/TE.CL)
+internal/notify         уведомления Telegram / Slack / Discord о крит-находках
 internal/vuln           nuclei + отсев FP
 internal/web            feroxbuster/ffuf / arjun / dalfox (+pipe) / CORS-аудит
 internal/extra          testssl / nikto / takeover (nuclei+subzy) / gowitness

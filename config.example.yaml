@@ -32,3 +32,9 @@ wordlists:                  # пути под Kali (seclists)
   dirs: /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt
   subs: /usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt
   params: /usr/share/seclists/Discovery/Web-Content/burp-parameter-names.txt
+
+notify:                     # уведомления о крит/high находках (опционально)
+  telegram_token: ""        # токен бота от BotFather
+  telegram_chat: ""         # chat_id (твой id или id группы)
+  slack_webhook: ""         # Slack Incoming Webhook URL
+  discord_webhook: ""       # Discord Webhook URL
