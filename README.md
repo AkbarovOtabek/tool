@@ -71,7 +71,16 @@ cp config.example.yaml config.yaml   # заполни scope, авторизац�
 
 Любой тул необязателен: если его нет в PATH, шаг пропускается с предупреждением.
 
-**Автоматически (рекомендуется):**
+**Одной командой (с нуля, на Kali/Debian):**
+
+```bash
+git clone https://github.com/AkbarovOtabek/tool && cd tool && bash install.sh
+```
+
+`install.sh` ставит Go/git, собирает бинарь `pentkit` и доустанавливает все тулы.
+Запускай от обычного пользователя — для apt-пакетов скрипт сам попросит sudo.
+
+**Если pentkit уже собран:**
 
 ```bash
 sudo ./pentkit setup        # доустановит всё недостающее: apt + go install + pipx + git
