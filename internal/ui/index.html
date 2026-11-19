@@ -1,95 +1,156 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>pentkit</title>
 <style>
-:root{--bg:#0b1220;--card:#131c2e;--card2:#0f1726;--fg:#e6edf6;--mut:#8aa0bd;--line:#223049;--accent:#3b82f6;--ok:#22c55e;--warn:#f59e0b}
+:root{
+  --bg:#0b1220;--card:#131c2e;--card2:#0f1726;--fg:#e6edf6;--mut:#8aa0bd;--line:#223049;
+  --accent:#3b82f6;--accent-fg:#fff;--ok:#22c55e;--warn-bg:#3a2a08;--warn-bd:#6b4e12;--warn-fg:#f5d58a;
+  --term-bg:#060b14;--term-fg:#b9c7dc;--tab-bg:#0f1726;--shadow:0 1px 3px rgba(0,0,0,.4);
+  --badge-on-bg:#0f3d24;--badge-on-fg:#6ee7a0;--badge-off-bg:#3d1f1f;--badge-off-fg:#f3a6a6;
+}
+html[data-theme=light]{
+  --bg:#eef2f8;--card:#ffffff;--card2:#f4f7fb;--fg:#1b2435;--mut:#5c6b84;--line:#dce3ee;
+  --accent:#2563eb;--accent-fg:#fff;--ok:#16a34a;--warn-bg:#fdf6e3;--warn-bd:#e7d4a1;--warn-fg:#8a6d1a;
+  --term-bg:#0b1220;--term-fg:#c7d4e8;--tab-bg:#e5ebf4;--shadow:0 1px 3px rgba(20,40,80,.08);
+  --badge-on-bg:#dcfce7;--badge-on-fg:#166534;--badge-off-bg:#fee2e2;--badge-off-fg:#b91c1c;
+}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 system-ui,Segoe UI,Roboto,sans-serif}
-.wrap{max-width:1100px;margin:0 auto;padding:20px 16px 60px}
-h1{font-size:20px;margin:0 0 2px;display:flex;align-items:center;gap:10px}
-.sub{color:var(--mut);font-size:13px;margin-bottom:16px}
-.warn{background:#3a2a08;border:1px solid #6b4e12;color:#f5d58a;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:16px}
+.wrap{max-width:1180px;margin:0 auto;padding:18px 16px 60px}
+/* header */
+.top{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+h1{font-size:20px;margin:0;display:flex;align-items:center;gap:9px}
+.sub{color:var(--mut);font-size:13px;margin-bottom:14px;max-width:820px}
+.spacer{flex:1}
+.theme-btn{background:var(--card);border:1px solid var(--line);color:var(--fg);border-radius:8px;
+  padding:7px 12px;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:6px}
+.theme-btn:hover{border-color:var(--accent)}
+/* tabs */
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin-bottom:16px}
+.tab{background:transparent;border:0;border-bottom:2px solid transparent;color:var(--mut);
+  padding:10px 16px;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:-1px}
+.tab:hover{color:var(--fg)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.page{display:none}.page.active{display:block}
+/* cards + form */
+.warn{background:var(--warn-bg);border:1px solid var(--warn-bd);color:var(--warn-fg);border-radius:8px;padding:9px 13px;font-size:13px;margin-bottom:16px}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-@media(max-width:760px){.grid{grid-template-columns:1fr}}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
-.card h2{font-size:14px;margin:0 0 12px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut)}
+@media(max-width:820px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:var(--shadow)}
+.card h2{font-size:13px;margin:0 0 12px;text-transform:uppercase;letter-spacing:.5px;color:var(--mut)}
 label{display:block;font-size:12px;color:var(--mut);margin:10px 0 4px}
-input[type=text],input[type=number],textarea{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px 10px;font:13px/1.4 inherit}
-textarea{resize:vertical;min-height:62px;font-family:ui-monospace,monospace}
+input[type=text],input[type=number],textarea,#proxy{width:100%;background:var(--card2);border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px 10px;font:13px/1.4 inherit}
+input:focus,textarea:focus{outline:0;border-color:var(--accent)}
+textarea{resize:vertical;min-height:60px;font-family:ui-monospace,monospace}
 .req label::after{content:" *";color:#ef4444}
-.opts{display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;margin-top:6px}
-.opt{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--fg)}
-.opt input{width:16px;height:16px}
-.badge{font-size:10px;padding:1px 6px;border-radius:999px;margin-left:auto}
-.badge.on{background:#0f3d24;color:#6ee7a0}.badge.off{background:#3d1f1f;color:#f3a6a6}
+/* modules list — каждый пункт с описанием «что делает» */
+.mods{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.mod{display:flex;gap:10px;padding:8px;border-radius:9px;cursor:pointer;align-items:flex-start}
+.mod:hover{background:var(--card2)}
+.mod input{width:16px;height:16px;margin-top:2px;flex-shrink:0;accent-color:var(--accent)}
+.mod .body{flex:1;min-width:0}
+.mod .name{font-size:13px;font-weight:600;color:var(--fg);display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.mod .desc{font-size:12px;color:var(--mut);margin-top:1px}
+.badge{font-size:10px;padding:1px 7px;border-radius:999px;font-weight:600}
+.badge.on{background:var(--badge-on-bg);color:var(--badge-on-fg)}
+.badge.off{background:var(--badge-off-bg);color:var(--badge-off-fg)}
+.stealth{display:flex;flex-direction:column;gap:2px;margin-top:4px}
+.hint{color:var(--mut);font-size:12px;margin-top:8px}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:14px}
-button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer}
-button.ghost{background:transparent;border:1px solid var(--line);color:var(--fg)}
+button.act{background:var(--accent);color:var(--accent-fg);border:0;border-radius:8px;padding:9px 18px;font-size:14px;font-weight:600;cursor:pointer}
+button.ghost{background:transparent;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:9px 16px;font-size:14px;font-weight:600;cursor:pointer}
 button:disabled{opacity:.5;cursor:not-allowed}
-.chips{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 10px}
-.chip{padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;color:#fff}
-.stage{font-size:13px;color:var(--mut);margin-bottom:8px}
-.log{background:#060b14;border:1px solid var(--line);border-radius:8px;padding:10px;height:260px;overflow:auto;font:12px/1.5 ui-monospace,monospace;color:#b9c7dc;white-space:pre-wrap}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.chip{padding:4px 10px;border-radius:999px;font-size:12px;font-weight:700;color:#fff}
+.stage{font-size:13px;color:var(--mut)}
+.log{background:var(--term-bg);border:1px solid var(--line);border-radius:8px;padding:10px;height:260px;overflow:auto;font:12px/1.5 ui-monospace,monospace;color:var(--term-fg);white-space:pre-wrap}
+/* findings */
+.fhead{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.filters{display:flex;gap:6px;flex-wrap:wrap}
+.filters button{padding:4px 11px;font-size:12px;font-weight:600;background:transparent;border:1px solid var(--line);color:var(--mut);border-radius:999px;cursor:pointer}
+.filters button.sel{color:var(--accent);border-color:var(--accent)}
 table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);vertical-align:top}
-th{color:var(--mut);font-size:11px;text-transform:uppercase}
-td.tgt{font-family:ui-monospace,monospace;font-size:12px;color:#9fb3d1;word-break:break-all;max-width:360px}
-.sev{font-weight:700;font-size:11px;padding:2px 7px;border-radius:5px;color:#fff;white-space:nowrap}
-.filters{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
-.filters button{padding:4px 10px;font-size:12px;font-weight:500}
+th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.3px}
+td.tgt{font-family:ui-monospace,monospace;font-size:12px;color:var(--mut);word-break:break-all;max-width:340px}
+.sev{font-weight:700;font-size:11px;padding:2px 8px;border-radius:5px;color:#fff;white-space:nowrap}
 .spin{width:12px;height:12px;border:2px solid var(--line);border-top-color:var(--accent);border-radius:50%;display:inline-block;animation:sp 1s linear infinite;vertical-align:middle}
 @keyframes sp{to{transform:rotate(360deg)}}
+/* proxy tab */
+.pxbar{display:flex;align-items:center;gap:8px;margin-bottom:10px;color:var(--mut);font-size:13px}
+#pxframe{width:100%;height:calc(100vh - 150px);min-height:560px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
+a{color:var(--accent)}
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>🛰️ pentkit <span id="live"></span></h1>
-  <div class="sub">Оркестратор авторизованного пентеста — один интерфейс для recon, Cloudflare-origin, уязвимостей, веб-тестов и отчёта. · <a href="/proxy?t=__TOKEN__" style="color:var(--accent)">🔀 Прокси (Burp-режим): перехват / Repeater →</a></div>
-  <div class="warn">⚠️ Запускай только против систем, на тест которых у тебя есть письменное разрешение. Поле «Авторизация» обязательно и попадает в отчёт.</div>
+  <div class="top">
+    <h1>🛰️ pentkit <span id="live"></span></h1>
+    <span class="spacer"></span>
+    <button class="theme-btn" id="themeBtn" title="Светлая / тёмная тема">🌙 <span id="themeLbl">Тёмная</span></button>
+  </div>
+  <div class="sub">Оркестратор авторизованного пентеста — recon, поиск origin за Cloudflare, уязвимости, веб-тесты, утечки секретов и отчёт в одном окне.</div>
 
-  <div class="grid">
-    <div class="card">
-      <h2>Параметры работы</h2>
-      <div class="req"><label>Идентификатор работы (name)</label><input type="text" id="name" placeholder="acme-2026-11"></div>
-      <label>Клиент</label><input type="text" id="client" placeholder="ACME LLC">
-      <div class="req"><label>Авторизация (номер/ссылка разрешения)</label><input type="text" id="auth" placeholder="Договор №123 от 2026-11-01"></div>
-      <label>Домены в скоупе (по одному в строке)</label><textarea id="domains" placeholder="acme.com&#10;acme-corp.net"></textarea>
-      <label>CIDR в скоупе (опц.)</label><textarea id="cidrs" placeholder="203.0.113.0/24"></textarea>
-      <label>Исключения out-of-scope (опц.)</label><textarea id="oos" placeholder="vpn.acme.com"></textarea>
-      <label>Параллелизм</label><input type="number" id="conc" value="10" min="1" max="50" style="width:90px">
-      <label style="margin-top:10px">Скрытность (против WAF/Firewall и блок-листов)</label>
-      <div class="opts">
-        <label class="opt"><input type="checkbox" id="tor"> 🔒 Весь трафик через Tor (SOCKS5 9050 + proxychains4)</label>
-        <label class="opt"><input type="checkbox" id="stealth"> 🐢 Stealth: низкий rate/concurrency, джиттер, ротация User-Agent</label>
-        <label class="opt"><input type="checkbox" id="passive"> 🛡 Пассивно: без портскана/nikto/wafw00f/инъекций</label>
+  <div class="tabs">
+    <button class="tab active" data-tab="scan">🔎 Сканер</button>
+    <button class="tab" data-tab="proxy">🔀 Прокси (Burp-режим)</button>
+  </div>
+
+  <!-- ===== ВКЛАДКА: СКАНЕР ===== -->
+  <div class="page active" id="page-scan">
+    <div class="warn">⚠️ Запускай только против систем, на тест которых у тебя есть письменное разрешение. Поле «Авторизация» обязательно и попадает в отчёт.</div>
+    <div class="grid">
+      <div class="card">
+        <h2>Параметры работы</h2>
+        <div class="req"><label>Идентификатор работы (name)</label><input type="text" id="name" placeholder="acme-2026-11"></div>
+        <label>Клиент</label><input type="text" id="client" placeholder="ACME LLC">
+        <div class="req"><label>Авторизация (номер/ссылка разрешения)</label><input type="text" id="auth" placeholder="Договор №123 от 2026-11-01"></div>
+        <label>Домены в скоупе (по одному в строке)</label><textarea id="domains" placeholder="acme.com&#10;acme-corp.net"></textarea>
+        <label>CIDR в скоупе (опц.)</label><textarea id="cidrs" placeholder="198.51.100.0/24"></textarea>
+        <label>Исключения out-of-scope (опц.)</label><textarea id="oos" placeholder="vpn.acme.com"></textarea>
+        <label>Параллелизм</label><input type="number" id="conc" value="10" min="1" max="50" style="width:90px">
+        <label style="margin-top:12px">Скрытность (против WAF/Firewall и блок-листов)</label>
+        <div class="stealth">
+          <label class="mod"><input type="checkbox" id="tor"><span class="body"><span class="name">🔒 Весь трафик через Tor</span><span class="desc">Прячет твой IP через SOCKS5 9050 + proxychains4. Нужен сервис <code>tor</code>. На заказном тесте обычно НЕ нужен — клиент ждёт известный IP.</span></span></label>
+          <label class="mod"><input type="checkbox" id="stealth"><span class="body"><span class="name">🐢 Stealth</span><span class="desc">Низкий rate/параллелизм, джиттер, ротация User-Agent — чтобы не попасть в блок-лист WAF.</span></span></label>
+          <label class="mod"><input type="checkbox" id="passive"><span class="body"><span class="name">🛡 Пассивно</span><span class="desc">Без портскана/nikto/wafw00f/инъекций — только тихая разведка.</span></span></label>
+        </div>
+        <input id="proxy" placeholder="свой SOCKS5: socks5://127.0.0.1:9050 (опц., вместо Tor)" style="margin-top:8px">
       </div>
-      <input id="proxy" placeholder="свой SOCKS5: socks5://127.0.0.1:9050 (опц., вместо Tor)" style="margin-top:6px">
-      <div style="color:var(--mut);font-size:12px;margin-top:6px">Tor прячет твой IP (не шифрует до цели — это делает HTTPS). Нужен запущенный сервис <code>tor</code> и <code>proxychains4</code>. Raw-скан (naabu/nmap) автоматически переводится в connect-режим.</div>
+
+      <div class="card">
+        <h2>Модули сканирования</h2>
+        <div class="mods" id="opts"></div>
+        <div class="hint">«Эксплойты» и «msf check» <b>не запускают</b> эксплойты: подтверждают уязвимости неинтрузивно и готовят <code>.rc</code> для ручного запуска. «Активные SQL-инъекции» агрессивны — включай только по согласованию с клиентом.</div>
+        <div class="row">
+          <button class="act" id="start">▶ Запустить</button>
+          <button class="ghost" id="stop" disabled>■ Стоп</button>
+          <button class="ghost" id="report" disabled>📄 Отчёт</button>
+        </div>
+        <div class="chips" id="chips"></div>
+        <div class="stage" id="stage"></div>
+        <div class="log" id="log" style="margin-top:8px"></div>
+      </div>
     </div>
 
-    <div class="card">
-      <h2>Модули сканирования</h2>
-      <div class="opts" id="opts"></div>
-      <div style="color:var(--mut);font-size:12px;margin-top:8px">«Эксплойты» и «msf check» не запускают эксплойты: подтверждают уязвимости (nmap NSE, Metasploit <code>check</code> — неинтрузивно), ищут публичные эксплойты (searchsploit) и готовят <code>.rc</code> для ручного запуска. «Активные SQL-инъекции» (sqlmap/dast) выключены по умолчанию — включай только по согласованию с клиентом, это агрессивный режим.</div>
-      <div class="row">
-        <button id="start">▶ Запустить</button>
-        <button id="stop" class="ghost" disabled>■ Стоп</button>
-        <button id="report" class="ghost" disabled>📄 Отчёт</button>
+    <div class="card" style="margin-top:16px">
+      <div class="fhead">
+        <h2 style="margin:0">Находки (<span id="fcount">0</span>)</h2>
+        <span class="spacer"></span>
+        <div class="filters" id="filters"></div>
       </div>
-      <div class="stage" id="stage" style="margin-top:14px"></div>
-      <div class="chips" id="chips"></div>
-      <div class="log" id="log"></div>
+      <table><thead><tr><th>Важность</th><th>Тип</th><th>Находка</th><th>Цель</th><th>Тул</th></tr></thead>
+      <tbody id="ftbody"></tbody></table>
     </div>
   </div>
 
-  <div class="card" style="margin-top:16px">
-    <h2>Находки (<span id="fcount">0</span>)</h2>
-    <div class="filters" id="filters"></div>
-    <table><thead><tr><th>Важность</th><th>Тип</th><th>Находка</th><th>Цель</th><th>Тул</th></tr></thead>
-    <tbody id="ftbody"></tbody></table>
+  <!-- ===== ВКЛАДКА: ПРОКСИ ===== -->
+  <div class="page" id="page-proxy">
+    <div class="pxbar">🔀 Перехватывающий прокси (MITM): история, Intercept, Repeater — как Burp, но встроенный. Открывается в этой вкладке.</div>
+    <iframe id="pxframe" title="pentkit proxy" loading="lazy"></iframe>
   </div>
 </div>
 
@@ -98,34 +159,62 @@ const TOKEN="__TOKEN__";
 const H={"X-Token":TOKEN,"Content-Type":"application/json"};
 const SEV={critical:"#7c1d1d",high:"#b91c1c",medium:"#b45309",low:"#2563eb",info:"#475569"};
 const SEVRU={critical:"Крит",high:"Высок",medium:"Средн",low:"Низк",info:"Инфо"};
+// [key, короткое имя, описание «что делает»]
 const MODULES=[
-  ["cloudflare","Cloudflare / origin (поиск + подтверждение)"],["fingerprint","Отпечаток + WAF (whatweb/wafw00f)"],
-  ["osint","OSINT: почты/хосты (theHarvester)"],["crawl","Краулинг + архивы (katana/gau)"],
-  ["vuln","Уязвимости (nuclei)"],["secrets","Утечки ключей в JS (secrets)"],
-  ["web","Веб-тесты + заголовки (ffuf/ferox/dalfox/CORS)"],
-  ["sqli","⚠ Активные SQL-инъекции (sqlmap/dast)"],["wordpress","WordPress (wpscan)"],
-  ["tls","TLS (testssl)"],["nikto","Веб-сервер (nikto)"],
-  ["takeover","Subdomain takeover"],["screenshots","Скриншоты (gowitness)"],
-  ["nmap","nmap: версии + NSE vuln"],["exploit","Эксплойты: searchsploit + msf .rc"],
-  ["msfcheck","Metasploit check (неинтрузивно)"],["verify","Перепроверка (меньше ложных)"]
+  ["cloudflare","Cloudflare / origin","Определяет Cloudflare и ищет реальный IP сервера (origin) за ним."],
+  ["fingerprint","Отпечаток + WAF","Технологии, CMS и наличие WAF/фаервола (whatweb/wafw00f)."],
+  ["osint","OSINT: почты/хосты","Собирает e-mail и хосты из открытых источников (theHarvester)."],
+  ["crawl","Краулинг + архивы","Обходит сайт и тянет URL из веб-архивов — больше поверхности (katana/gau/waybackurls/gf)."],
+  ["vuln","Уязвимости","Сканер по шаблонам: CVE, мисконфиги, с отсевом ложных (nuclei)."],
+  ["secrets","Утечки ключей в JS","Ищет утёкшие токены AWS/Google/GitHub/Slack… в JS-файлах."],
+  ["web","Веб-тесты + заголовки","Директории, скрытые параметры, XSS, CORS, security-заголовки (ffuf/ferox/dalfox)."],
+  ["sqli","⚠ Активные SQL-инъекции","Боевые инъекции и фаззинг (sqlmap/dast). Агрессивно — только по согласованию."],
+  ["wordpress","WordPress","Уязвимые плагины, темы и версии WordPress (wpscan)."],
+  ["tls","TLS","Слабые шифры и протоколы TLS/SSL (testssl)."],
+  ["nikto","Веб-сервер","Базовые проблемы веб-сервера по сигнатурам (nikto)."],
+  ["takeover","Subdomain takeover","Проверяет перехват заброшенных поддоменов (nuclei/subzy)."],
+  ["screenshots","Скриншоты","Делает скриншоты живых сайтов для отчёта (gowitness)."],
+  ["nmap","nmap: версии + NSE","Версии сервисов и NSE-скрипты уязвимостей по CVE."],
+  ["exploit","Эксплойты","Публичные эксплойты Exploit-DB + msf .rc (без автозапуска)."],
+  ["msfcheck","Metasploit check","Неинтрузивно подтверждает уязвимость, без эксплуатации."],
+  ["verify","Перепроверка","Перепроверяет срабатывания nuclei — меньше ложных в отчёте."]
 ];
 const TOOLMAP={cloudflare:null,fingerprint:"whatweb",osint:"theHarvester",crawl:"katana",vuln:"nuclei",secrets:null,web:"ffuf",sqli:"sqlmap",wordpress:"wpscan",tls:"testssl",nikto:"nikto",takeover:"nuclei",screenshots:"gowitness",nmap:"nmap",exploit:"searchsploit",msfcheck:"msfconsole",verify:"nuclei"};
 let filter="all", poll=null;
-
 function el(id){return document.getElementById(id)}
 
+/* ---- тема ---- */
+function applyTheme(t){
+  document.documentElement.setAttribute("data-theme",t);
+  el("themeBtn").firstChild.textContent = t==="dark" ? "🌙 " : "☀️ ";
+  el("themeLbl").textContent = t==="dark" ? "Тёмная" : "Светлая";
+  try{localStorage.setItem("pentkit-theme",t)}catch(e){}
+}
+function toggleTheme(){applyTheme(document.documentElement.getAttribute("data-theme")==="dark"?"light":"dark")}
+(function(){let t="dark";try{t=localStorage.getItem("pentkit-theme")||"dark"}catch(e){}applyTheme(t)})();
+
+/* ---- вкладки ---- */
+function showTab(name){
+  document.querySelectorAll(".tab").forEach(b=>b.classList.toggle("active",b.dataset.tab===name));
+  document.querySelectorAll(".page").forEach(p=>p.classList.toggle("active",p.id==="page-"+name));
+  if(name==="proxy" && !el("pxframe").src) el("pxframe").src="/proxy?t="+TOKEN; // ленивая загрузка
+}
+
+/* ---- модули ---- */
 async function loadTools(){
   let tools={};
   try{tools=await(await fetch("/api/tools",{headers:H})).json()}catch(e){}
   const box=el("opts");box.innerHTML="";
-  const offByDefault={sqli:true}; // агрессивные инъекции включают вручную
-  for(const [k,label] of MODULES){
+  const offByDefault={sqli:true};
+  for(const [k,name,desc] of MODULES){
     const need=TOOLMAP[k];
     const have=need?tools[need]:true;
     const checked=have&&!offByDefault[k];
-    const d=document.createElement("label");d.className="opt";
-    d.innerHTML=`<input type="checkbox" data-k="${k}" ${checked?"checked":""}> ${label}`+
-      (need?`<span class="badge ${have?'on':'off'}">${have?need:need+" нет"}</span>`:"");
+    const badge=need?`<span class="badge ${have?'on':'off'}">${have?need:need+" нет"}</span>`:
+      `<span class="badge on">встроено</span>`;
+    const d=document.createElement("label");d.className="mod";
+    d.innerHTML=`<input type="checkbox" data-k="${k}" ${checked?"checked":""}>`+
+      `<span class="body"><span class="name">${name} ${badge}</span><span class="desc">${desc}</span></span>`;
     box.appendChild(d);
   }
 }
@@ -149,7 +238,6 @@ async function start(){
   el("live").innerHTML='<span class="spin"></span>';
   if(poll)clearInterval(poll);poll=setInterval(tick,1500);tick();
 }
-
 async function stop(){await fetch("/api/stop",{method:"POST",headers:H})}
 
 async function tick(){
@@ -174,7 +262,7 @@ async function loadFindings(){
   let f;try{f=await(await fetch("/api/findings",{headers:H})).json()}catch(e){return}
   f=f||[];el("fcount").textContent=f.length;
   const sevs=["all","critical","high","medium","low","info"];
-  el("filters").innerHTML=sevs.map(s=>`<button class="ghost" onclick="setFilter('${s}')" style="${filter===s?'border-color:var(--accent)':''}">${s==="all"?"Все":SEVRU[s]}</button>`).join("");
+  el("filters").innerHTML=sevs.map(s=>`<button class="${filter===s?'sel':''}" onclick="setFilter('${s}')">${s==="all"?"Все":SEVRU[s]}</button>`).join("");
   const rows=f.filter(x=>filter==="all"||x.severity===filter).map(x=>
     `<tr><td><span class="sev" style="background:${SEV[x.severity]||'#475569'}">${SEVRU[x.severity]||x.severity}</span></td>`+
     `<td>${esc(x.type)}</td><td>${esc(x.title)}${x.tags?'<br><span style="color:var(--mut);font-size:11px">'+x.tags.join(", ")+'</span>':''}</td>`+
@@ -184,6 +272,8 @@ async function loadFindings(){
 function setFilter(s){filter=s;loadFindings()}
 function esc(s){return(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}
 
+el("themeBtn").onclick=toggleTheme;
+document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>showTab(b.dataset.tab));
 el("start").onclick=start;
 el("stop").onclick=stop;
 el("report").onclick=()=>window.open("/api/report?t="+TOKEN,"_blank");

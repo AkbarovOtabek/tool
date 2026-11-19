@@ -1,11 +1,12 @@
 <!doctype html>
-<html lang="ru">
+<html lang="ru" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>pentkit — прокси</title>
 <style>
-:root{--bg:#0b1220;--card:#131c2e;--card2:#0f1726;--fg:#e6edf6;--mut:#8aa0bd;--line:#223049;--accent:#3b82f6;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444}
+:root{--bg:#0b1220;--card:#131c2e;--card2:#0f1726;--fg:#e6edf6;--mut:#8aa0bd;--line:#223049;--accent:#3b82f6;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;--pane:#060b14;--pane-fg:#b9c7dc;--hover:#17223a}
+html[data-theme=light]{--bg:#eef2f8;--card:#ffffff;--card2:#f4f7fb;--fg:#1b2435;--mut:#5c6b84;--line:#dce3ee;--accent:#2563eb;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--pane:#0b1220;--pane-fg:#c7d4e8;--hover:#eef2f8}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 system-ui,Segoe UI,Roboto,sans-serif}
 .wrap{max-width:1200px;margin:0 auto;padding:18px 16px 60px}
@@ -29,21 +30,21 @@ table{width:100%;border-collapse:collapse;font-size:12px}
 th,td{text-align:left;padding:5px 7px;border-bottom:1px solid var(--line);vertical-align:top}
 th{color:var(--mut);font-size:10px;text-transform:uppercase}
 tbody tr{cursor:pointer}
-tbody tr:hover{background:#17223a}
-td.m{font-family:ui-monospace,monospace;color:#9fb3d1;word-break:break-all}
+tbody tr:hover{background:var(--hover)}
+td.m{font-family:ui-monospace,monospace;color:var(--mut);word-break:break-all}
 .st2{color:#6ee7a0}.st3{color:#f5d58a}.st4{color:#f3a6a6}.st5{color:#f3a6a6}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 @media(max-width:820px){.grid2{grid-template-columns:1fr}}
-.pane{background:#060b14;border:1px solid var(--line);border-radius:8px;padding:10px;height:300px;overflow:auto;font:11px/1.5 ui-monospace,monospace;color:#b9c7dc;white-space:pre-wrap;word-break:break-all}
+.pane{background:var(--pane);border:1px solid var(--line);border-radius:8px;padding:10px;height:300px;overflow:auto;font:11px/1.5 ui-monospace,monospace;color:var(--pane-fg);white-space:pre-wrap;word-break:break-all}
 .oos{opacity:.5}
 .note{color:var(--mut);font-size:11px}
-code{background:#0f1726;padding:1px 5px;border-radius:4px}
+code{background:var(--card2);padding:1px 5px;border-radius:4px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>🔀 pentkit — прокси <span id="pill" class="pill off">остановлен</span></h1>
-  <div class="sub">Перехват HTTP/HTTPS (MITM), история, Intercept и Repeater — как Burp, но в одном бинарнике. <a href="/?t=__TOKEN__">← к сканеру</a></div>
+  <div class="sub">Перехват HTTP/HTTPS (MITM), история, Intercept и Repeater — как Burp, но в одном бинарнике. <a href="/?t=__TOKEN__" target="_top">← к сканеру</a></div>
 
   <div class="warn" style="background:#3a2a08;border:1px solid #6b4e12;color:#f5d58a;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:14px">
     ⚠️ Прокси расшифровывает твой HTTPS-трафик (MITM). Используй только на своей машине и только для авторизованного теста. Снимай прокси и удаляй CA из браузера после работы.
@@ -106,6 +107,9 @@ code{background:#0f1726;padding:1px 5px;border-radius:4px}
 </div>
 
 <script>
+// Тема наследуется от сканера (та же вкладка, общий localStorage).
+(function(){try{var t=localStorage.getItem("pentkit-theme")||"dark";document.documentElement.setAttribute("data-theme",t)}catch(e){}
+window.addEventListener("storage",function(e){if(e.key==="pentkit-theme"&&e.newValue)document.documentElement.setAttribute("data-theme",e.newValue)})})();
 const TOKEN="__TOKEN__";
 const H={"X-Token":TOKEN,"Content-Type":"application/json"};
 let running=false, interceptOn=false, poll=null, cur=null;
