@@ -39,6 +39,7 @@ var typeRu = map[string]string{
 	store.TypeJWT:      "JWT", store.TypeAPI: "API-эндпоинты",
 	store.TypeAuth: "Аутентификация", store.TypeBypass: "Обход доступа",
 	store.TypeLeak: "Утечки (OSINT)", store.TypeSmuggle: "Request smuggling",
+	store.TypeAD: "Active Directory",
 }
 
 func typeLabel(t string) string {

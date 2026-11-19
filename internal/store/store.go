@@ -57,6 +57,7 @@ const (
 	TypeBypass     = "bypass"   // обход контроля доступа (401/403 → 2xx)
 	TypeLeak       = "leak"     // утечка из внешних источников (LeakIX/IntelX)
 	TypeSmuggle    = "smuggle"  // HTTP request smuggling (десинхронизация)
+	TypeAD         = "ad"       // Active Directory: юзеры, хэши, шары, мисконфиги
 )
 
 // Finding — одна находка. ID считается детерминированно, чтобы автоматически дедуплицировать.

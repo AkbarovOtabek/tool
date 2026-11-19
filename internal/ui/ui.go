@@ -78,6 +78,11 @@ type scanRequest struct {
 	TgToken       string `json:"tg_token"`
 	TgChat        string `json:"tg_chat"`
 	SlackHook     string `json:"slack_hook"`
+	AdDomain      string `json:"ad_domain"`
+	AdDC          string `json:"ad_dc"`
+	AdUser        string `json:"ad_user"`
+	AdPass        string `json:"ad_pass"`
+	AdUserlist    string `json:"ad_userlist"`
 	Options       struct {
 		Cloudflare  bool `json:"cloudflare"`
 		Crawl       bool `json:"crawl"`
@@ -93,6 +98,7 @@ type scanRequest struct {
 		Leaks       bool `json:"leaks"`
 		Smuggle     bool `json:"smuggle"`
 		BruteDNS    bool `json:"brutedns"`
+		AD          bool `json:"ad"`
 		Notify      bool `json:"notify"`
 		Web         bool `json:"web"`
 		SQLi        bool `json:"sqli"`
@@ -187,7 +193,9 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
 		"subzy", "SecretFinder", "kr", "jwt_tool",
 		// новые тулы
 		"tlsx", "puredns", "massdns", "crlfuzz", "x8", "ghauri", "paramspider",
-		"notify", "interactsh-client"}
+		"notify", "interactsh-client",
+		// AD / внутрянка
+		"nxc", "kerbrute", "enum4linux-ng", "smbmap", "ldapsearch"}
 	res := map[string]bool{}
 	for _, t := range tools {
 		res[t] = rn.Has(t)
@@ -236,7 +244,7 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 		Exposure: req.Options.Exposure, JWT: req.Options.JWT,
 		APIDisco: req.Options.APIDisco, Bypass: req.Options.Bypass, AuthTest: req.Options.AuthTest,
 		Leaks: req.Options.Leaks, Smuggle: req.Options.Smuggle,
-		BruteDNS: req.Options.BruteDNS, Notify: req.Options.Notify,
+		BruteDNS: req.Options.BruteDNS, AD: req.Options.AD, Notify: req.Options.Notify,
 		Web: req.Options.Web, SQLi: req.Options.SQLi,
 		WordPress: req.Options.WordPress, TLS: req.Options.TLS,
 		Nikto: req.Options.Nikto, Takeover: req.Options.Takeover,
@@ -844,6 +852,8 @@ func buildConfig(req scanRequest) (*config.Config, *scope.Scope, error) {
 	cfg.Notify.TelegramToken = strings.TrimSpace(req.TgToken)
 	cfg.Notify.TelegramChat = strings.TrimSpace(req.TgChat)
 	cfg.Notify.SlackWebhook = strings.TrimSpace(req.SlackHook)
+	cfg.AD = config.AD{Domain: strings.TrimSpace(req.AdDomain), DC: strings.TrimSpace(req.AdDC),
+		Username: strings.TrimSpace(req.AdUser), Password: req.AdPass, UserList: strings.TrimSpace(req.AdUserlist)}
 	if cfg.Stealth {
 		if cfg.RateLimit == 0 {
 			cfg.RateLimit = 10
