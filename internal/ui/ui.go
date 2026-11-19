@@ -478,6 +478,23 @@ var payloadRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9/_]*$`)
 
 func (s *Server) curJob() *job { s.mu.Lock(); defer s.mu.Unlock(); return s.job }
 
+// appendEvidence дописывает в evidence.log работы строку-доказательство с меткой
+// времени (кто/что/когда запускал check/exploit) — для раздела отчёта.
+func appendEvidence(dir, action, module, target string) {
+	if dir == "" {
+		return
+	}
+	line := fmt.Sprintf("%s\t%s\tmodule=%s\ttarget=%s\n",
+		time.Now().UTC().Format(time.RFC3339), action, module, target)
+	f, err := os.OpenFile(filepath.Join(dir, "evidence.log"),
+		os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	f.WriteString(line)
+}
+
 // handleExploitInfo — наличие тулов + содержимое готового metasploit.rc текущей работы.
 func (s *Server) handleExploitInfo(w http.ResponseWriter, r *http.Request) {
 	rn := runner.New(time.Minute, false)
@@ -566,6 +583,7 @@ func (s *Server) handleMsfCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	x := "use " + module + "; set RHOSTS " + target + "; check; exit"
+	appendEvidence(j.st.Dir(), "msf-check", module, target)
 	res := rn.Run(r.Context(), "msfconsole", "-q", "-x", x)
 	writeJSON(w, map[string]any{
 		"cmd":    "msfconsole -q -x \"" + x + "\"",
@@ -641,6 +659,7 @@ func (s *Server) handleMsfRun(w http.ResponseWriter, r *http.Request) {
 		Title: "Запущен боевой модуль: " + module, Detail: "payload: " + req.Payload,
 		Evidence: "ручной запуск через веб (exploit); результат — см. ниже", Tool: "metasploit",
 		Tags: []string{"exploit-run", "manual"}})
+	appendEvidence(j.st.Dir(), "msf-exploit", module, target)
 	res := rn.Run(r.Context(), "msfconsole", "-q", "-x", x)
 	out := strings.TrimSpace(res.Stdout + "\n" + res.Stderr)
 	session := strings.Contains(out, "session") && (strings.Contains(out, "opened") || strings.Contains(strings.ToLower(out), "meterpreter"))

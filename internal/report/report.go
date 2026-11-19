@@ -49,6 +49,42 @@ func typeLabel(t string) string {
 	return t
 }
 
+// attackMap — соответствие типа находки технике MITRE ATT&CK (для раздела отчёта,
+// понятного SOC клиента: по какой технике класс находки эксплуатируется).
+var attackMap = map[string]string{
+	store.TypeVuln:      "T1190 — Exploit Public-Facing Application",
+	store.TypeInjection: "T1190 — Exploit Public-Facing Application",
+	store.TypeOrigin:    "T1590 — Gather Victim Network Information (обход WAF/CDN)",
+	store.TypeSecret:    "T1552 — Unsecured Credentials",
+	store.TypeCORS:      "T1190 — Exploit Public-Facing Application",
+	store.TypeDir:       "T1083 — File and Directory Discovery",
+	store.TypeHeader:    "T1595 — Active Scanning / hardening",
+}
+
+// remediationMap — что порекомендовать клиенту закрыть, по типу находки.
+var remediationMap = map[string]string{
+	store.TypeVuln:      "Обновите уязвимый компонент до исправленной версии, примените патчи по CVE; закройте сервис снаружи, если он не нужен публично.",
+	store.TypeInjection: "Используйте параметризованные запросы/ORM, валидируйте и экранируйте ввод; для RCE — обновите компонент и ограничьте права процесса.",
+	store.TypeOrigin:    "Ограничьте доступ к origin только диапазонами Cloudflare (firewall allow CF), смените IP origin и уберите его утечки (DNS-история, favicon, SPF, старые A-записи).",
+	store.TypeSecret:    "Немедленно отзовите утёкший ключ/токен, удалите из JS/репозитория, перейдите на серверное хранение секретов и ротацию.",
+	store.TypeCORS:      "Задайте строгий allowlist Origin, не отражайте произвольный Origin и не ставьте Access-Control-Allow-Credentials с wildcard.",
+	store.TypeDir:       "Закройте служебные/админские пути аутентификацией, отключите листинг директорий, уберите бэкап- и конфиг-файлы из публичного доступа.",
+	store.TypeHeader:    "Добавьте security-заголовки (CSP, HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy) и скройте версии ПО в заголовках.",
+}
+
+// cvssBand — ориентировочный диапазон CVSS v3.1 по уровню (рейтинговые полосы
+// FIRST). Это полоса важности, а не точный вектор — его считают вручную.
+var cvssBand = map[store.Severity]string{
+	store.SevCritical: "CVSS 9.0–10.0 (Critical)",
+	store.SevHigh:     "CVSS 7.0–8.9 (High)",
+	store.SevMedium:   "CVSS 4.0–6.9 (Medium)",
+	store.SevLow:      "CVSS 0.1–3.9 (Low)",
+	store.SevInfo:     "—",
+}
+
+func remediation(f store.Finding) string { return remediationMap[f.Type] }
+func attack(f store.Finding) string      { return attackMap[f.Type] }
+
 // Generate пишет report.md и report.html в каталог работы. Возвращает путь к HTML.
 func Generate(cfg *config.Config, st *store.Store) (string, error) {
 	findings := st.All()
@@ -156,7 +192,7 @@ func surfaceItems(s surface) [][2]string {
 func itoaReport(n int) string { return fmt.Sprintf("%d", n) }
 
 func execSummary(findings []store.Finding, counts map[store.Severity]int) string {
-	oc, vv, _, em := highlights(findings)
+	oc, vv, waf, em := highlights(findings)
 	var parts []string
 	if n := counts[store.SevCritical]; n > 0 {
 		parts = append(parts, fmt.Sprintf("%d критических", n))
@@ -172,6 +208,9 @@ func execSummary(findings []store.Finding, counts map[store.Severity]int) string
 		head = "Выявлено: " + strings.Join(parts, ", ") + "."
 	}
 	var extra []string
+	if waf > 0 {
+		extra = append(extra, "периметр защищён WAF/CDN")
+	}
 	if oc > 0 {
 		extra = append(extra, fmt.Sprintf("подтверждён(о) origin в обход Cloudflare: %d", oc))
 	}
@@ -226,6 +265,14 @@ func buildMarkdown(cfg *config.Config, findings []store.Finding, counts map[stor
 			}
 			if f.Evidence != "" {
 				fmt.Fprintf(&b, "  - _доказательство:_ %s\n", f.Evidence)
+			}
+			line := cvssBand[s]
+			if a := attack(f); a != "" {
+				line += " · ATT&CK: " + a
+			}
+			fmt.Fprintf(&b, "  - %s\n", line)
+			if rem := remediation(f); rem != "" {
+				fmt.Fprintf(&b, "  - 🛠 _Как исправить:_ %s\n", rem)
 			}
 			meta := f.Tool
 			if len(f.Tags) > 0 {
@@ -291,6 +338,13 @@ summary{cursor:pointer;font-weight:600}
 details table{width:100%;border-collapse:collapse;margin-top:8px;font-size:13px}
 details td{padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:top}
 details td.k{color:var(--mut);font-family:ui-monospace,monospace;word-break:break-all;width:45%}
+.rem{margin-top:6px;padding:8px 10px;background:#0f3d24;color:#bbf7d0;border-radius:6px;font-size:13px}
+.exp{color:var(--mut);font-size:13px;margin:8px 0 0}
+@media print{
+  :root{--bg:#fff;--card:#f4f6fb;--fg:#111;--mut:#444;--line:#ccc}
+  body{background:#fff}.f{break-inside:avoid}details{border:1px solid #ccc}.rem{background:#eafaf0;color:#14532d}
+  .noprint{display:none}
+}
 </style></head><body><div class="wrap">`)
 	fmt.Fprintf(&b, "<h1>Отчёт о тестировании на проникновение</h1>")
 	fmt.Fprintf(&b, `<p class="meta">Клиент: %s · Работа: %s · Авторизация: %s · %s</p>`,
@@ -298,6 +352,7 @@ details td.k{color:var(--mut);font-family:ui-monospace,monospace;word-break:brea
 		html.EscapeString(cfg.Engagement.Authorization), time.Now().Format("2006-01-02 15:04"))
 
 	fmt.Fprintf(&b, `<div class="summary">%s</div>`, html.EscapeString(execSummary(findings, counts)))
+	b.WriteString(`<p class="exp noprint">Экспорт в PDF: Ctrl/Cmd+P → «Сохранить как PDF» (стили адаптированы под печать).</p>`)
 
 	b.WriteString(`<div class="pills">`)
 	for _, s := range sevOrder {
@@ -334,6 +389,14 @@ details td.k{color:var(--mut);font-family:ui-monospace,monospace;word-break:brea
 			}
 			if f.Evidence != "" {
 				fmt.Fprintf(&b, `<div class="d">Доказательство: %s</div>`, html.EscapeString(f.Evidence))
+			}
+			meta := []string{cvssBand[s]}
+			if a := attack(f); a != "" {
+				meta = append(meta, "ATT&CK: "+a)
+			}
+			fmt.Fprintf(&b, `<div class="d">%s</div>`, html.EscapeString(strings.Join(meta, " · ")))
+			if rem := remediation(f); rem != "" {
+				fmt.Fprintf(&b, `<div class="rem">🛠 Как исправить: %s</div>`, html.EscapeString(rem))
 			}
 			b.WriteString(`<div class="d">`)
 			if f.Tool != "" {

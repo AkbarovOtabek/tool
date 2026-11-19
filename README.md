@@ -143,7 +143,7 @@ naabu требует `libpcap-dev`. seclists нужен для словарей 
 | recon | subfinder, amass, assetfinder, findomain, dnsx, naabu, httpx | поддомены (4 источника, параллельно) → резолв → порты → HTTP/технологии |
 | fingerprint | whatweb, wafw00f | отпечаток технологий/CMS и определение WAF |
 | osint | theHarvester | почты и хосты из открытых источников |
-| cloudflare | crt.sh, Shodan, SecurityTrails, DNS | детект CF, поиск **и подтверждение** origin в обход WAF |
+| cloudflare | crt.sh, Shodan, favicon-hash, Censys, SecurityTrails, SPF/MX, DNS | детект CF, поиск **и подтверждение** origin в обход WAF |
 | crawl | katana, gau, waybackurls, gf | краулинг + архивы + сортировка URL по типам инъекций (xss/sqli/ssrf/lfi/redirect) |
 | secrets | встроенный regex, SecretFinder | утечки ключей/токенов (AWS/Google/Slack/GitHub/Stripe/JWT/private key) в JS |
 | exposure | встроенный | открытые `.git`/`.svn`/`.env`/бэкапы, Spring `/actuator`(+`/env`,`/heapdump`), Swagger/OpenAPI, GraphQL-интроспекция, phpinfo, `/server-status`, `.htpasswd` — **с валидацией тела** |
@@ -177,6 +177,7 @@ naabu требует `libpcap-dev`. seclists нужен для словарей 
 | nmap | nmap | версии сервисов + NSE-скрипты уязвимостей (CVE) |
 | exploit | searchsploit, metasploit | публичные эксплойты Exploit-DB + готовый msf `.rc` |
 | msf check | metasploit | неинтрузивное подтверждение уязвимости (`check`, без `exploit`) |
+| report | — | MD+HTML; значимые находки с **CVSS-полосой**, **MITRE ATT&CK** и блоком **«Как исправить»**; экспорт в PDF через печать браузера |
 
 ## Cloudflare
 
@@ -184,15 +185,16 @@ naabu требует `libpcap-dev`. seclists нужен для словарей 
 
 1. детектит CF по диапазонам IP;
 2. собирает кандидатов origin из CT-логов (crt.sh), резолва известных хостов,
-   а при наличии ключей — из **Shodan** (поиск по hostname) и **SecurityTrails**
-   (история A-записей до перехода на CF);
+   **SPF/MX-записей** (IP смежной инфраструктуры, без ключей), а при наличии ключей —
+   из **Shodan** (hostname + **favicon-hash**: хосты с тем же фавиконом), **Censys**
+   и **SecurityTrails** (история A-записей до перехода на CF);
 3. **активно подтверждает** каждый кандидат: шлёт запрос напрямую на IP с подменой
    заголовка `Host` и сравнивает ответ (title/размер тела) с сайтом за WAF. Если
    совпало — origin подтверждён (находка `origin-confirmed`, severity high), и его
    можно сканировать напрямую в обход Cloudflare.
 
-Ключи в `config.yaml` → `keys:` (`shodan`, `securitytrails`) заметно усиливают
-поиск origin. Ручная проверка кандидата:
+Ключи в `config.yaml` → `keys:` (`shodan`, `censys` в формате `id:secret`,
+`securitytrails`) заметно усиливают поиск origin. Ручная проверка кандидата:
 
 ```bash
 curl -H "Host: acme.com" --resolve acme.com:443:<origin-ip> https://acme.com/ -k

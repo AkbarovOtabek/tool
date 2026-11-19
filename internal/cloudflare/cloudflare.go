@@ -119,20 +119,34 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 			}
 		}
 	}
+	addCand := func(ip, src string) {
+		if !IsCloudflareIP(ip) && !isPrivate(ip) {
+			candIPs[ip] = append(candIPs[ip], src)
+		}
+	}
 	for _, d := range sc.Domains() {
 		if cfg.Keys.Shodan != "" {
 			for _, ip := range shodanOrigins(ctx, cfg.Keys.Shodan, d) {
-				if !IsCloudflareIP(ip) && !isPrivate(ip) {
-					candIPs[ip] = append(candIPs[ip], "shodan:"+d)
-				}
+				addCand(ip, "shodan:"+d)
+			}
+			// favicon-hash: хосты с тем же фавиконом (частый способ найти origin).
+			for _, ip := range faviconHashOrigins(ctx, cfg.Keys.Shodan, d) {
+				addCand(ip, "favicon:"+d)
 			}
 		}
 		if cfg.Keys.SecurityTrails != "" {
 			for _, ip := range securityTrailsHistory(ctx, cfg.Keys.SecurityTrails, d) {
-				if !IsCloudflareIP(ip) && !isPrivate(ip) {
-					candIPs[ip] = append(candIPs[ip], "securitytrails:"+d)
-				}
+				addCand(ip, "securitytrails:"+d)
 			}
+		}
+		if cfg.Keys.Censys != "" {
+			for _, ip := range censysOrigins(ctx, cfg.Keys.Censys, d) {
+				addCand(ip, "censys:"+d)
+			}
+		}
+		// SPF/MX — пассивно, без ключей: IP почтовой/смежной инфраструктуры вне CF.
+		for _, ip := range spfMXOrigins(ctx, d) {
+			addCand(ip, "spf/mx:"+d)
 		}
 	}
 
