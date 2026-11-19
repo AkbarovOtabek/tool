@@ -230,9 +230,10 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 		if opts.SQLi {
 			// Активный DAST-фаззинг по реальным точкам входа, а не по главным страницам.
 			web.DASTOnURLs(ctx, rn, st, ev, injectionURLs(cand))
-			// x8 — скрытые параметры, ghauri — альтернативный SQLi-движок (если есть).
+			// x8 — скрытые параметры, ghauri — SQLi-движок, commix — command injection.
 			web.X8(ctx, cfg, rn, st, ev, injectionURLs(cand))
 			web.Ghauri(ctx, rn, st, ev, cand.SQLi)
+			web.Commix(ctx, rn, st, ev, cand.RCE)
 		}
 	}
 

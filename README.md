@@ -156,7 +156,8 @@ naabu требует `libpcap-dev`. seclists нужен для словарей 
 Авто-тулы (подхватываются, если установлены, в рамках модулей выше):
 - **recon:** `tlsx` (поддомены из TLS-сертификатов), `uncover` (хосты из Shodan по ключу), `cdncheck` (классификация CDN/WAF), `dnsgen` (перестановки поддоменов в бруте);
 - **crawl:** `paramspider` (URL с параметрами из архивов);
-- **web:** `crlfuzz` (CRLF), `Gxss` (отражение параметров → XSS), `oralyzer` (open redirect), `x8` (скрытые параметры, при SQLi), `ghauri` (альтернативный SQLi-движок, при SQLi);
+- **web:** `crlfuzz` (CRLF), `Gxss` (отражение параметров → XSS), `oralyzer` (open redirect), `x8` (скрытые параметры, при SQLi), `ghauri` (альтернативный SQLi-движок, при SQLi), `commix` (command injection, при SQLi), `gobuster` (content/vhost discovery);
+- **password attacks (ставятся, запуск вручную по своим целям/хэшам):** `hydra` (онлайн-брут логинов), `john`, `hashcat` (офлайн-крекинг);
 - **secret-scan (ставятся, запуск вручную):** `trufflehog`, `gitleaks` — верифицированный поиск секретов в дампнутом `.git`/репозитории;
 - **прочее:** `rustscan` (быстрый портскан), `interactsh-client` (OAST для слепых уязвимостей — nuclei использует по умолчанию).
 
