@@ -21,10 +21,12 @@ rate_limit: 0               # глобальный лимит запросов/�
 timeout: 15m                # таймаут одного внешнего тула
 output_dir: engagements     # куда складывать результаты
 
-keys:                       # ключи для поиска origin за Cloudflare (опционально)
-  shodan: ""
-  securitytrails: ""
+keys:                       # ключи внешних сервисов (опционально)
+  shodan: ""                # поиск origin за Cloudflare
+  securitytrails: ""        # поиск origin за Cloudflare
   censys: ""                # формат "id:secret"
+  leakix: ""                # leakix.net — утёкшие/открытые сервисы и конфиги (модуль «Утечки»)
+  intelx: ""                # intelx.io — утёкшие данные/credentials (модуль «Утечки»)
 
 wordlists:                  # пути под Kali (seclists)
   dirs: /usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt

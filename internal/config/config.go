@@ -77,23 +77,25 @@ func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
 
 // Engagement описывает работу и подтверждает авторизацию.
 type Engagement struct {
-	Name          string `yaml:"name"`           // короткий идентификатор (папка результатов)
-	Client        string `yaml:"client"`         // название организации
-	Authorization string `yaml:"authorization"`  // ссылка/номер разрешения на тест
+	Name          string `yaml:"name"`          // короткий идентификатор (папка результатов)
+	Client        string `yaml:"client"`        // название организации
+	Authorization string `yaml:"authorization"` // ссылка/номер разрешения на тест
 }
 
 // Scope задаёт границы теста.
 type Scope struct {
-	Domains    []string `yaml:"domains"`     // корневые домены в скоупе
-	CIDRs      []string `yaml:"cidrs"`       // диапазоны IP в скоупе
-	OutOfScope []string `yaml:"out_of_scope"`// хосты/домены вне скоупа (исключения)
+	Domains    []string `yaml:"domains"`      // корневые домены в скоупе
+	CIDRs      []string `yaml:"cidrs"`        // диапазоны IP в скоупе
+	OutOfScope []string `yaml:"out_of_scope"` // хосты/домены вне скоупа (исключения)
 }
 
 // Keys — ключи внешних API.
 type Keys struct {
-	Shodan        string `yaml:"shodan"`
+	Shodan         string `yaml:"shodan"`
 	SecurityTrails string `yaml:"securitytrails"`
-	Censys        string `yaml:"censys"` // формат "id:secret"
+	Censys         string `yaml:"censys"` // формат "id:secret"
+	LeakIX         string `yaml:"leakix"` // ключ leakix.net (утёкшие сервисы/конфиги)
+	IntelX         string `yaml:"intelx"` // ключ intelx.io (утёкшие данные/credentials)
 }
 
 // Wordlists — пути к словарям (значения по умолчанию под Kali).

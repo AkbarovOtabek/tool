@@ -55,6 +55,8 @@ const (
 	TypeAPI        = "api"      // найденный API-эндпоинт (kiterunner)
 	TypeAuth       = "auth"     // проблемы аутентификации (нет rate-limit и т.п.)
 	TypeBypass     = "bypass"   // обход контроля доступа (401/403 → 2xx)
+	TypeLeak       = "leak"     // утечка из внешних источников (LeakIX/IntelX)
+	TypeSmuggle    = "smuggle"  // HTTP request smuggling (десинхронизация)
 )
 
 // Finding — одна находка. ID считается детерминированно, чтобы автоматически дедуплицировать.
