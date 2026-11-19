@@ -50,6 +50,11 @@ const (
 	TypeHeader     = "header"   // анализ security-заголовков (пассивно)
 	TypeSecret     = "secret"   // утечка ключа/токена в JS/ответах
 	TypeCORS       = "cors"     // мисконфигурация CORS
+	TypeExposure   = "exposure" // открытый служебный файл/интерфейс (.git/.env/actuator…)
+	TypeJWT        = "jwt"      // проблемы JWT (alg:none, слабый секрет, нет exp)
+	TypeAPI        = "api"      // найденный API-эндпоинт (kiterunner)
+	TypeAuth       = "auth"     // проблемы аутентификации (нет rate-limit и т.п.)
+	TypeBypass     = "bypass"   // обход контроля доступа (401/403 → 2xx)
 )
 
 // Finding — одна находка. ID считается детерминированно, чтобы автоматически дедуплицировать.

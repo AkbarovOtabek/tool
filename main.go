@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"pentkit/internal/report"
 	"pentkit/internal/runner"
 	"pentkit/internal/scope"
+	"pentkit/internal/setup"
 	"pentkit/internal/store"
 	"pentkit/internal/ui"
 )
@@ -37,15 +39,17 @@ func main() {
 	case "serve":
 		cmdServe(os.Args[2:])
 	case "run":
-		cmdPipeline(os.Args[2:], engineOpts("run", false))
+		cmdPipeline(os.Args[2:], engineOpts("run", false), true) // run: доустановка тулов по умолчанию
 	case "recon":
-		cmdPipeline(os.Args[2:], engineOpts("recon", false))
+		cmdPipeline(os.Args[2:], engineOpts("recon", false), false)
 	case "scan":
-		cmdPipeline(os.Args[2:], engineOpts("scan", false))
+		cmdPipeline(os.Args[2:], engineOpts("scan", false), false)
 	case "web":
-		cmdPipeline(os.Args[2:], engineOpts("web", false))
+		cmdPipeline(os.Args[2:], engineOpts("web", false), false)
 	case "report":
 		cmdReport(os.Args[2:])
+	case "setup", "install":
+		cmdSetup(os.Args[2:])
 	case "version", "-v", "--version":
 		fmt.Println("pentkit", version)
 	default:
@@ -59,7 +63,8 @@ func usage() {
 
 Использование:
   pentkit serve [-addr 127.0.0.1:8777]     Веб-интерфейс (всё в браузере)
-  pentkit run    -c config.yaml [-v] [--no-verify]   Полный пайплайн (все модули)
+  pentkit setup                            Доустановить недостающие тулы (apt/go/pipx/git)
+  pentkit run    -c config.yaml [-v] [--no-verify]   Полный пайплайн (сам доустанавливает тулы)
   pentkit recon  -c config.yaml            Только разведка + поиск origin за CF
   pentkit scan   -c config.yaml            Уязвимости: nuclei + takeover + TLS + nikto
   pentkit web    -c config.yaml            Краулинг + веб-тесты + секреты (ffuf/ferox/dalfox/gf)
@@ -70,6 +75,8 @@ func usage() {
   -c   путь к конфигу (по умолчанию config.yaml)
   -v   подробный вывод
   --no-verify  не перепроверять срабатывания nuclei (быстрее, больше ложных)
+  --install    доустановить недостающие тулы перед запуском (для run включено по умолчанию)
+  --no-install для run: НЕ доустанавливать тулы
   --sqli       активные SQL-инъекции (sqlmap + nuclei -dast) — агрессивно, по согласованию
   --passive    пассивный режим: без портскана/nikto/активных проверок (тихо для WAF)
 
@@ -93,10 +100,11 @@ func engineOpts(stage string, noVerify bool) engine.Options {
 	case "recon":
 		return engine.Options{Cloudflare: true, Fingerprint: true, OSINT: true}
 	case "scan":
-		return engine.Options{Vuln: true, Takeover: true, TLS: true, Nikto: true,
+		return engine.Options{Vuln: true, Exposure: true, Bypass: true, Takeover: true, TLS: true, Nikto: true,
 			WordPress: true, Nmap: true, Exploit: true, MsfCheck: true, Verify: !noVerify}
 	case "web":
-		return engine.Options{Crawl: true, Fingerprint: true, Web: true, Secrets: true}
+		return engine.Options{Crawl: true, Fingerprint: true, Web: true, Secrets: true,
+			Exposure: true, JWT: true, APIDisco: true, Bypass: true}
 	}
 	return engine.AllOn()
 }
@@ -111,14 +119,17 @@ func cmdServe(args []string) {
 	}
 }
 
-func cmdPipeline(args []string, baseStage engine.Options) {
+func cmdPipeline(args []string, baseStage engine.Options, defaultInstall bool) {
 	fs := flag.NewFlagSet("pentkit", flag.ExitOnError)
 	cfgPath := fs.String("c", "config.yaml", "путь к конфигу")
 	verbose := fs.Bool("v", false, "подробный вывод")
 	noVerify := fs.Bool("no-verify", false, "не перепроверять срабатывания nuclei")
 	sqli := fs.Bool("sqli", false, "включить активные SQL-инъекции (sqlmap + nuclei -dast)")
 	passive := fs.Bool("passive", false, "пассивный режим: без шумных активных проверок (для WAF/Firewall)")
+	install := fs.Bool("install", defaultInstall, "перед запуском доустановить недостающие тулы (apt/go/pipx; apt требует root/sudo)")
+	noInstall := fs.Bool("no-install", false, "не доустанавливать тулы (отменяет -install, в т.ч. дефолт для run)")
 	_ = fs.Parse(args)
+	doInstall := *install && !*noInstall
 
 	cfg, sc, st := load(*cfgPath)
 	defer st.Close()
@@ -142,6 +153,10 @@ func cmdPipeline(args []string, baseStage engine.Options) {
 
 	rn := runner.New(cfg.Timeout.Duration, *verbose)
 	rn.Passive = *passive
+	// Автоустановка тулов — до opsec (без proxychains) и до пайплайна.
+	if doInstall {
+		setup.Install(ctx, rn, event.Console{})
+	}
 	engDir := filepath.Join(cfg.OutputDir, cfg.Engagement.Name)
 	setupOpsec(cfg, rn, engDir)
 	start := time.Now()
@@ -151,6 +166,23 @@ func cmdPipeline(args []string, baseStage engine.Options) {
 	}
 	summary(st, path)
 	fmt.Printf("\nГотово за %s\n", time.Since(start).Round(time.Second))
+}
+
+// cmdSetup доустанавливает все недостающие внешние тулы (apt/go/pipx/git).
+func cmdSetup(args []string) {
+	fs := flag.NewFlagSet("setup", flag.ExitOnError)
+	verbose := fs.Bool("v", false, "подробный вывод")
+	_ = fs.Parse(args)
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	rn := runner.New(15*time.Minute, *verbose)
+	sum := setup.Install(ctx, rn, event.Console{})
+	fmt.Printf("\nУстановлено: %d · уже было: %d · не удалось: %d\n",
+		len(sum.Installed), len(sum.Already), len(sum.Failed))
+	if len(sum.Failed) > 0 {
+		fmt.Println("Не поставлены (см. README):", strings.Join(sum.Failed, ", "))
+		os.Exit(1)
+	}
 }
 
 func cmdReport(args []string) {

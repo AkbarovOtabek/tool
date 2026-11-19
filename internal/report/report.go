@@ -4,6 +4,7 @@ package report
 import (
 	"fmt"
 	"html"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -34,6 +35,9 @@ var typeRu = map[string]string{
 	store.TypeParam: "Параметры/URL", store.TypeInjection: "Инъекции", store.TypeWAF: "WAF",
 	store.TypeOSINT: "OSINT", store.TypeHeader: "Заголовки",
 	store.TypeSecret: "Утечки секретов", store.TypeCORS: "CORS",
+	store.TypeExposure: "Открытые файлы/интерфейсы",
+	store.TypeJWT:      "JWT", store.TypeAPI: "API-эндпоинты",
+	store.TypeAuth: "Аутентификация", store.TypeBypass: "Обход доступа",
 }
 
 func typeLabel(t string) string {
@@ -170,6 +174,19 @@ func buildMarkdown(cfg *config.Config, findings []store.Finding, counts map[stor
 			b.WriteString("\n")
 		}
 	}
+
+	b.WriteString("## Ручная проверка (бизнес-логика)\n\n")
+	b.WriteString("_Автосканер это не находит — проверяется руками по своим тестовым аккаунтам._\n\n")
+	for _, it := range manualChecklist {
+		fmt.Fprintf(&b, "- [ ] **%s** — %s\n", it[0], it[1])
+	}
+	if dorks := googleDorks(cfg.Scope.Domains); len(dorks) > 0 {
+		b.WriteString("\n## OSINT: Google-дорки\n\n")
+		for _, d := range dorks {
+			fmt.Fprintf(&b, "- [`%s`](%s)\n", d.query, d.url)
+		}
+	}
+	b.WriteString("\n")
 	return b.String()
 }
 
@@ -254,8 +271,70 @@ details td.k{color:var(--mut);font-family:ui-monospace,monospace;word-break:brea
 		}
 	}
 
+	// Ручная проверка — то, что автосканеры не ловят (особенно важно для банков).
+	b.WriteString(`<h2>Ручная проверка (бизнес-логика)</h2>`)
+	b.WriteString(`<p class="meta">Автосканер это не находит — проверяется руками по своим тестовым аккаунтам.</p>`)
+	b.WriteString(`<div class="f">`)
+	for _, it := range manualChecklist {
+		fmt.Fprintf(&b, `<div class="d">☐ <b>%s</b> — %s</div>`,
+			html.EscapeString(it[0]), html.EscapeString(it[1]))
+	}
+	b.WriteString(`</div>`)
+
+	// Google-дорки по доменам скоупа — пассивный OSINT.
+	if dorks := googleDorks(cfg.Scope.Domains); len(dorks) > 0 {
+		b.WriteString(`<h2>OSINT: Google-дорки</h2>`)
+		b.WriteString(`<p class="meta">Пассивный поиск утёкших файлов/страниц — открой ссылки вручную.</p><div class="f">`)
+		for _, d := range dorks {
+			fmt.Fprintf(&b, `<div class="d"><a href="%s" target="_blank" rel="noopener">%s</a></div>`,
+				html.EscapeString(d.url), html.EscapeString(d.query))
+		}
+		b.WriteString(`</div>`)
+	}
+
 	b.WriteString(`</div></body></html>`)
 	return b.String()
+}
+
+// manualChecklist — чеклист ручной проверки бизнес-логики (вектор №1 для финсистем).
+var manualChecklist = [][2]string{
+	{"IDOR", "смена ID в запросе — доступ к чужим счетам, выпискам, документам"},
+	{"Манипуляция суммой/валютой", "изменить amount/currency в запросе платежа (в т.ч. отрицательные и очень большие)"},
+	{"Transaction replay", "повторить подписанный запрос перевода — проходит ли дважды"},
+	{"Mass assignment", "добавить лишние поля (role, isAdmin, balance, status) в JSON — применяются ли"},
+	{"Race condition (TOCTOU)", "параллельные запросы на вывод/списание — двойная трата"},
+	{"2FA/OTP bypass", "пропуск шага подтверждения, брут/повтор OTP, слабая длина кода"},
+	{"Privilege escalation", "горизонтальный (чужой объект) и вертикальный (функции админа) доступ"},
+	{"Негативные сценарии", "операции без баланса, с чужой карты, после logout, с истёкшим токеном"},
+}
+
+type dork struct{ query, url string }
+
+// googleDorks формирует типовые дорки по корневым доменам скоупа.
+func googleDorks(domains []string) []dork {
+	tmpl := []string{
+		`site:%s filetype:pdf`,
+		`site:%s (filetype:sql OR filetype:env OR filetype:log OR filetype:bak OR filetype:xls)`,
+		`site:%s intitle:"index of"`,
+		`site:%s (inurl:admin OR inurl:login OR inurl:dashboard)`,
+		`site:%s ext:php inurl:?id=`,
+		`site:pastebin.com %s`,
+		`site:github.com %s password`,
+	}
+	var out []dork
+	seen := map[string]bool{}
+	for _, d := range domains {
+		d = strings.TrimSpace(d)
+		if d == "" || seen[d] {
+			continue
+		}
+		seen[d] = true
+		for _, t := range tmpl {
+			q := fmt.Sprintf(t, d)
+			out = append(out, dork{query: q, url: "https://www.google.com/search?q=" + url.QueryEscape(q)})
+		}
+	}
+	return out
 }
 
 func bySeverity(findings []store.Finding, s store.Severity) []store.Finding {

@@ -9,11 +9,13 @@ import (
 	"strings"
 
 	"pentkit/internal/analyze"
+	"pentkit/internal/apisec"
 	"pentkit/internal/cloudflare"
 	"pentkit/internal/config"
 	"pentkit/internal/crawl"
 	"pentkit/internal/event"
 	"pentkit/internal/exploit"
+	"pentkit/internal/exposure"
 	"pentkit/internal/extra"
 	"pentkit/internal/recon"
 	"pentkit/internal/report"
@@ -33,6 +35,11 @@ type Options struct {
 	OSINT       bool // theHarvester (почты/хосты)
 	Vuln        bool // nuclei
 	Secrets     bool // поиск утечек ключей/токенов в JS
+	Exposure    bool // открытые .git/.env/actuator/swagger/бэкапы (с валидацией тела)
+	JWT         bool // анализ JWT: alg:none, слабый секрет, RS256→HS256, нет exp
+	APIDisco    bool // дискавери API-эндпоинтов (kiterunner)
+	Bypass      bool // обход 401/403 (broken access control)
+	AuthTest    bool // активная проверка rate-limit на auth-эндпоинтах (осознанно)
 	Web         bool // ffuf/arjun/dalfox + аудит заголовков
 	SQLi        bool // активные инъекции: sqlmap + nuclei -dast (агрессивно)
 	WordPress   bool // wpscan
@@ -51,7 +58,8 @@ type Options struct {
 func AllOn() Options {
 	return Options{
 		Cloudflare: true, Crawl: true, Fingerprint: true, OSINT: true,
-		Vuln: true, Secrets: true, Web: true, WordPress: true,
+		Vuln: true, Secrets: true, Exposure: true, JWT: true, APIDisco: true, Bypass: true,
+		Web: true, WordPress: true,
 		TLS: true, Nikto: true, Takeover: true, Screenshots: true,
 		Nmap: true, Exploit: true, MsfCheck: true, Verify: true,
 	}
@@ -89,6 +97,31 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 	if opts.Secrets {
 		ev.Stage("Утечки секретов в JS")
 		secrets.Run(ctx, rn, st, ev, cand.JS)
+	}
+
+	if opts.Exposure {
+		ev.Stage("Открытые файлы/интерфейсы (.git/.env/actuator/swagger)")
+		exposure.Run(ctx, rn, st, ev, urls)
+	}
+
+	if opts.JWT {
+		ev.Stage("JWT (alg:none / слабый секрет / RS256→HS256)")
+		apisec.JWT(ctx, rn, st, ev, urls)
+	}
+
+	if opts.APIDisco {
+		ev.Stage("Дискавери API (kiterunner)")
+		apisec.Kiterunner(ctx, rn, st, ev, urls)
+	}
+
+	if opts.Bypass {
+		ev.Stage("Обход 401/403 (broken access control)")
+		apisec.BypassForbidden(ctx, rn, st, ev, forbiddenURLs(rec))
+	}
+
+	if opts.AuthTest {
+		ev.Stage("Rate-limit на auth-эндпоинтах")
+		apisec.AuthRateLimit(ctx, rn, st, ev, urls)
 	}
 
 	if opts.Fingerprint {
@@ -190,6 +223,17 @@ func hostnames(rec *recon.Result) []string {
 		out = append(out, h)
 	}
 	sort.Strings(out)
+	return out
+}
+
+// forbiddenURLs выбирает URL живых сервисов, вернувших 401/403 — кандидаты на обход.
+func forbiddenURLs(rec *recon.Result) []string {
+	var out []string
+	for _, s := range rec.HTTP {
+		if s.Status == 401 || s.Status == 403 {
+			out = append(out, s.URL)
+		}
+	}
 	return out
 }
 
