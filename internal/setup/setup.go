@@ -90,6 +90,7 @@ var registry = []tool{
 	{"nxc", []step{{kindApt, "netexec"}, {kindPipx, "git+https://github.com/Pennyw0rth/NetExec"}}},
 	{"enum4linux-ng", []step{{kindApt, "enum4linux-ng"}, {kindPipx, "enum4linux-ng"}}},
 	{"impacket-GetNPUsers", []step{{kindApt, "impacket-scripts"}, {kindPipx, "impacket"}}},
+	{"bloodhound-python", []step{{kindApt, "bloodhound.py"}, {kindPipx, "bloodhound"}}},
 	{"smbmap", []step{{kindApt, "smbmap"}}},
 	{"ldapsearch", []step{{kindApt, "ldap-utils"}}},
 	{"searchsploit", []step{{kindApt, "exploitdb"}}},

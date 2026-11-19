@@ -195,7 +195,7 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
 		"tlsx", "puredns", "massdns", "crlfuzz", "x8", "ghauri", "paramspider",
 		"notify", "interactsh-client",
 		// AD / внутрянка
-		"nxc", "kerbrute", "enum4linux-ng", "smbmap", "ldapsearch"}
+		"nxc", "kerbrute", "enum4linux-ng", "smbmap", "ldapsearch", "bloodhound-python"}
 	res := map[string]bool{}
 	for _, t := range tools {
 		res[t] = rn.Has(t)

@@ -152,7 +152,7 @@ naabu требует `libpcap-dev`. seclists нужен для словарей 
 | smuggle (⚠) | встроенный | timing-детект HTTP request smuggling (CL.TE/TE.CL) — рискованно, по согласованию; находка = кандидат на ручную проверку |
 | brutedns | puredns + massdns | активный перебор поддоменов по словарю; возвращает только живые (резолвятся) |
 | notify | встроенный | сводка крит/high находок в Telegram/Slack/Discord по завершении (config.notify) |
-| ad | netexec/kerbrute/enum4linux-ng/impacket | **внутренняя** разведка Active Directory: null-сессия, подпись SMB, шары, валидные юзеры, AS-REP/Kerberoast хэши. Нужны `config.ad` (домен+DC), только для авторизованных внутренних работ |
+| ad | netexec/kerbrute/enum4linux-ng/impacket/bloodhound-python | **внутренняя** разведка Active Directory: null-сессия, подпись SMB, шары, валидные юзеры, AS-REP/Kerberoast хэши, **BloodHound-граф** и **secretsdump** (NTLM-хэши/DCSync с кредами). Нужны `config.ad` (домен+DC), только для авторизованных внутренних работ |
 
 Авто-тулы (подхватываются, если установлены, в рамках модулей выше):
 - **recon:** `tlsx` (поддомены из TLS-сертификатов), `uncover` (хосты из Shodan по ключу), `cdncheck` (классификация CDN/WAF), `dnsgen` (перестановки поддоменов в бруте);
