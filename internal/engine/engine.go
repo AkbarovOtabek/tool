@@ -14,6 +14,7 @@ import (
 	"pentkit/internal/crawl"
 	"pentkit/internal/event"
 	"pentkit/internal/exploit"
+	"pentkit/internal/exposure"
 	"pentkit/internal/extra"
 	"pentkit/internal/recon"
 	"pentkit/internal/report"
@@ -33,6 +34,7 @@ type Options struct {
 	OSINT       bool // theHarvester (почты/хосты)
 	Vuln        bool // nuclei
 	Secrets     bool // поиск утечек ключей/токенов в JS
+	Exposure    bool // открытые .git/.env/actuator/swagger/бэкапы (с валидацией тела)
 	Web         bool // ffuf/arjun/dalfox + аудит заголовков
 	SQLi        bool // активные инъекции: sqlmap + nuclei -dast (агрессивно)
 	WordPress   bool // wpscan
@@ -51,7 +53,7 @@ type Options struct {
 func AllOn() Options {
 	return Options{
 		Cloudflare: true, Crawl: true, Fingerprint: true, OSINT: true,
-		Vuln: true, Secrets: true, Web: true, WordPress: true,
+		Vuln: true, Secrets: true, Exposure: true, Web: true, WordPress: true,
 		TLS: true, Nikto: true, Takeover: true, Screenshots: true,
 		Nmap: true, Exploit: true, MsfCheck: true, Verify: true,
 	}
@@ -89,6 +91,11 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 	if opts.Secrets {
 		ev.Stage("Утечки секретов в JS")
 		secrets.Run(ctx, rn, st, ev, cand.JS)
+	}
+
+	if opts.Exposure {
+		ev.Stage("Открытые файлы/интерфейсы (.git/.env/actuator/swagger)")
+		exposure.Run(ctx, rn, st, ev, urls)
 	}
 
 	if opts.Fingerprint {

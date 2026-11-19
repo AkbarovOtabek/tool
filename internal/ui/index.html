@@ -228,6 +228,7 @@ const MODULES=[
   ["crawl","Краулинг + архивы","Обходит сайт и тянет URL из веб-архивов — больше поверхности (katana/gau/waybackurls/gf)."],
   ["vuln","Уязвимости","Сканер по шаблонам: CVE, мисконфиги, с отсевом ложных (nuclei)."],
   ["secrets","Утечки ключей в JS","Ищет утёкшие токены AWS/Google/GitHub/Slack… в JS-файлах."],
+  ["exposure","Открытые файлы/интерфейсы",".git/.env/бэкапы, Spring /actuator, Swagger/GraphQL, phpinfo — с проверкой содержимого. Без внешних тулов."],
   ["web","Веб-тесты + заголовки","Директории, скрытые параметры, XSS, CORS, security-заголовки (ffuf/ferox/dalfox)."],
   ["sqli","⚠ Активные SQL-инъекции","Боевые инъекции и фаззинг (sqlmap/dast). Агрессивно — только по согласованию."],
   ["wordpress","WordPress","Уязвимые плагины, темы и версии WordPress (wpscan)."],
@@ -240,7 +241,7 @@ const MODULES=[
   ["msfcheck","Metasploit check","Неинтрузивно подтверждает уязвимость, без эксплуатации."],
   ["verify","Перепроверка","Перепроверяет срабатывания nuclei — меньше ложных в отчёте."]
 ];
-const TOOLMAP={cloudflare:null,fingerprint:"whatweb",osint:"theHarvester",crawl:"katana",vuln:"nuclei",secrets:null,web:"ffuf",sqli:"sqlmap",wordpress:"wpscan",tls:"testssl",nikto:"nikto",takeover:"nuclei",screenshots:"gowitness",nmap:"nmap",exploit:"searchsploit",msfcheck:"msfconsole",verify:"nuclei"};
+const TOOLMAP={cloudflare:null,fingerprint:"whatweb",osint:"theHarvester",crawl:"katana",vuln:"nuclei",secrets:null,exposure:null,web:"ffuf",sqli:"sqlmap",wordpress:"wpscan",tls:"testssl",nikto:"nikto",takeover:"nuclei",screenshots:"gowitness",nmap:"nmap",exploit:"searchsploit",msfcheck:"msfconsole",verify:"nuclei"};
 let filter="all", poll=null;
 function el(id){return document.getElementById(id)}
 

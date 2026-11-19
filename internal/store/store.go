@@ -50,6 +50,7 @@ const (
 	TypeHeader     = "header"   // анализ security-заголовков (пассивно)
 	TypeSecret     = "secret"   // утечка ключа/токена в JS/ответах
 	TypeCORS       = "cors"     // мисконфигурация CORS
+	TypeExposure   = "exposure" // открытый служебный файл/интерфейс (.git/.env/actuator…)
 )
 
 // Finding — одна находка. ID считается детерминированно, чтобы автоматически дедуплицировать.

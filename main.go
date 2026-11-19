@@ -93,10 +93,10 @@ func engineOpts(stage string, noVerify bool) engine.Options {
 	case "recon":
 		return engine.Options{Cloudflare: true, Fingerprint: true, OSINT: true}
 	case "scan":
-		return engine.Options{Vuln: true, Takeover: true, TLS: true, Nikto: true,
+		return engine.Options{Vuln: true, Exposure: true, Takeover: true, TLS: true, Nikto: true,
 			WordPress: true, Nmap: true, Exploit: true, MsfCheck: true, Verify: !noVerify}
 	case "web":
-		return engine.Options{Crawl: true, Fingerprint: true, Web: true, Secrets: true}
+		return engine.Options{Crawl: true, Fingerprint: true, Web: true, Secrets: true, Exposure: true}
 	}
 	return engine.AllOn()
 }

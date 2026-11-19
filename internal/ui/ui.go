@@ -77,6 +77,7 @@ type scanRequest struct {
 		OSINT       bool `json:"osint"`
 		Vuln        bool `json:"vuln"`
 		Secrets     bool `json:"secrets"`
+		Exposure    bool `json:"exposure"`
 		Web         bool `json:"web"`
 		SQLi        bool `json:"sqli"`
 		WordPress   bool `json:"wordpress"`
@@ -211,7 +212,8 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 		Cloudflare: req.Options.Cloudflare, Crawl: req.Options.Crawl,
 		Fingerprint: req.Options.Fingerprint, OSINT: req.Options.OSINT,
 		Vuln: req.Options.Vuln, Secrets: req.Options.Secrets,
-		Web: req.Options.Web, SQLi: req.Options.SQLi,
+		Exposure: req.Options.Exposure,
+		Web:      req.Options.Web, SQLi: req.Options.SQLi,
 		WordPress: req.Options.WordPress, TLS: req.Options.TLS,
 		Nikto: req.Options.Nikto, Takeover: req.Options.Takeover,
 		Screenshots: req.Options.Screenshots, Nmap: req.Options.Nmap,

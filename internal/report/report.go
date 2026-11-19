@@ -34,6 +34,7 @@ var typeRu = map[string]string{
 	store.TypeParam: "Параметры/URL", store.TypeInjection: "Инъекции", store.TypeWAF: "WAF",
 	store.TypeOSINT: "OSINT", store.TypeHeader: "Заголовки",
 	store.TypeSecret: "Утечки секретов", store.TypeCORS: "CORS",
+	store.TypeExposure: "Открытые файлы/интерфейсы",
 }
 
 func typeLabel(t string) string {
