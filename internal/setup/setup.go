@@ -114,7 +114,13 @@ var registry = []tool{
 }
 
 // prereqApt — пакеты, нужные для сборки/установки прочих тулов (ставим одним махом).
-var prereqApt = []string{"git", "golang-go", "python3-pip", "pipx", "libpcap-dev", "ruby"}
+var prereqApt = []string{
+	"git", "golang-go", "python3-pip", "pipx", "libpcap-dev", "ruby",
+	"cargo",           // сборка Rust-тулов (x8, rustscan)
+	"build-essential", // компиляция нативных зависимостей
+	"curl", "wget",    // загрузки
+	"seclists", // словари (x8/dirbust используют config.wordlists)
+}
 
 const jwtToolInstall = `set -e
 DIR="$HOME/.local/share/jwt_tool"

@@ -77,8 +77,11 @@ cp config.example.yaml config.yaml   # заполни scope, авторизац�
 git clone https://github.com/AkbarovOtabek/tool && cd tool && bash install.sh
 ```
 
-`install.sh` ставит Go/git, собирает бинарь `pentkit` и доустанавливает все тулы.
-Запускай от обычного пользователя — для apt-пакетов скрипт сам попросит sudo.
+`install.sh` ставит Go/git, собирает бинарь `pentkit` и доустанавливает **весь арсенал**
+через `pentkit setup`: recon/web/vuln-тулы (go), Rust-тулы (x8/rustscan через cargo),
+Python-тулы (pipx), AD-инструменты (netexec/kerbrute/impacket/bloodhound-python),
+password-тулы (hydra/john/hashcat) и словари seclists. Запускай от обычного
+пользователя — для apt-пакетов скрипт сам попросит sudo.
 
 **Если pentkit уже собран:**
 
