@@ -121,9 +121,11 @@ type Keys struct {
 
 // Wordlists — пути к словарям (значения по умолчанию под Kali).
 type Wordlists struct {
-	Dirs   string `yaml:"dirs"`
-	Subs   string `yaml:"subs"`
-	Params string `yaml:"params"`
+	Dirs      string `yaml:"dirs"`
+	Subs      string `yaml:"subs"`
+	Params    string `yaml:"params"`
+	Users     string `yaml:"users"`     // логины для hydra (онлайн-брут)
+	Passwords string `yaml:"passwords"` // пароли для hydra/john (крекинг)
 }
 
 // Default возвращает конфиг со значениями по умолчанию для Kali.
@@ -137,6 +139,10 @@ func Default() *Config {
 			Dirs:   "/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt",
 			Subs:   "/usr/share/seclists/Discovery/DNS/subdomains-top1million-110000.txt",
 			Params: "/usr/share/seclists/Discovery/Web-Content/burp-parameter-names.txt",
+			Users:  "/usr/share/seclists/Usernames/top-usernames-shortlist.txt",
+			// Короткий список — онлайн-брут hydra должен быть быстрым и щадящим,
+			// а не гнать rockyou по сети. Крекинг хэшей (john) берёт rockyou отдельно.
+			Passwords: "/usr/share/seclists/Passwords/Common-Credentials/10-million-password-list-top-1000.txt",
 		},
 	}
 }

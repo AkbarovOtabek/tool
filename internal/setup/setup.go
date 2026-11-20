@@ -85,6 +85,16 @@ var registry = []tool{
 	{"john", []step{{kindApt, "john"}}},       // офлайн-крекинг хэшей
 	{"hashcat", []step{{kindApt, "hashcat"}}}, // офлайн-крекинг хэшей (GPU)
 	{"commix", []step{{kindApt, "commix"}, {kindPipx, "git+https://github.com/commixproject/commix"}}},
+	// --- THM-классика: пост-эксплуатация, форензика, генерация словарей ---
+	{"evil-winrm", []step{{kindApt, "evil-winrm"}}},  // шелл по WinRM (Windows-боксы)
+	{"responder", []step{{kindApt, "responder"}}},    // LLMNR/NBT-NS poisoning (перехват хэшей)
+	{"smbclient", []step{{kindApt, "smbclient"}}},    // доступ к SMB-шарам
+	{"dirb", []step{{kindApt, "dirb"}}},              // классический брут директорий
+	{"steghide", []step{{kindApt, "steghide"}}},      // стеганография в изображениях
+	{"binwalk", []step{{kindApt, "binwalk"}}},        // анализ/извлечение из файлов
+	{"exiftool", []step{{kindApt, "libimage-exiftool-perl"}}}, // метаданные файлов
+	{"crunch", []step{{kindApt, "crunch"}}},          // генерация словарей паролей
+	{"cewl", []step{{kindApt, "cewl"}}},              // словарь из слов целевого сайта
 	// --- Active Directory / внутрянка ---
 	{"kerbrute", []step{{kindGo, "github.com/ropnop/kerbrute@latest"}}},
 	{"nxc", []step{{kindApt, "netexec"}, {kindPipx, "git+https://github.com/Pennyw0rth/NetExec"}}},

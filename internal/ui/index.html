@@ -399,9 +399,11 @@ const MODULES=[
   ["nmap","nmap: версии + NSE","Версии сервисов и NSE-скрипты уязвимостей по CVE."],
   ["exploit","Эксплойты","Публичные эксплойты Exploit-DB + msf .rc (без автозапуска)."],
   ["msfcheck","Metasploit check","Неинтрузивно подтверждает уязвимость, без эксплуатации."],
+  ["hydra","⚠ hydra: брут логинов","Онлайн-подбор паролей ssh/ftp/telnet по словарю (логины + топ-1000). Активно и шумно — только по согласованию."],
+  ["crack","john: крекинг хэшей","Офлайн-подбор найденных хэшей (AS-REP/Kerberoast/unix) по словарю rockyou. Локально, безопасно для цели."],
   ["verify","Перепроверка","Перепроверяет срабатывания nuclei — меньше ложных в отчёте."]
 ];
-const TOOLMAP={cloudflare:null,fingerprint:"whatweb",osint:"theHarvester",crawl:"katana",vuln:"nuclei",secrets:null,exposure:null,jwt:null,apidisco:"kr",bypass:null,authtest:null,leaks:null,brutedns:"puredns",ad:"nxc",smuggle:null,notify:null,web:"ffuf",sqli:"sqlmap",wordpress:"wpscan",tls:"testssl",nikto:"nikto",takeover:"nuclei",screenshots:"gowitness",nmap:"nmap",exploit:"searchsploit",msfcheck:"msfconsole",verify:"nuclei"};
+const TOOLMAP={cloudflare:null,fingerprint:"whatweb",osint:"theHarvester",crawl:"katana",vuln:"nuclei",secrets:null,exposure:null,jwt:null,apidisco:"kr",bypass:null,authtest:null,leaks:null,brutedns:"puredns",ad:"nxc",smuggle:null,notify:null,web:"ffuf",sqli:"sqlmap",wordpress:"wpscan",tls:"testssl",nikto:"nikto",takeover:"nuclei",screenshots:"gowitness",nmap:"nmap",exploit:"searchsploit",msfcheck:"msfconsole",hydra:"hydra",crack:"john",verify:"nuclei"};
 const ALLKEYS=MODULES.map(m=>m[0]);
 function setOf(keys){const o={};keys.forEach(k=>o[k]=1);return o}
 // Готовые режимы в один клик.
@@ -414,7 +416,7 @@ const PROFILES=[
    mods:setOf(["cloudflare","fingerprint","osint","crawl","exposure"])},
   {id:"full",icon:"🔍",name:"Полный аудит",tag:"safe",tagt:"без SQLi",
    desc:"Все модули, кроме рискованных активных (SQL-инъекции, rate-limit, request smuggling): портскан, API-дискавери, эксплойты (без автозапуска), msf check.",
-   mods:setOf(ALLKEYS.filter(k=>k!=="sqli"&&k!=="authtest"&&k!=="smuggle"))},
+   mods:setOf(ALLKEYS.filter(k=>k!=="sqli"&&k!=="authtest"&&k!=="smuggle"&&k!=="hydra"))},
   {id:"aggressive",icon:"⚔️",name:"Агрессивный",tag:"hot",tagt:"по согласию",
    desc:"Всё включено + активные SQL-инъекции, DAST-фаззинг, тест rate-limit и request smuggling. Может нарушить работу сервиса — только с письменным согласием клиента!",
    mods:setOf(ALLKEYS)},
@@ -588,10 +590,13 @@ function findingRow(x,i){
   const tgt=/^https?:\/\//.test(x.target)?`<a href="${esc(x.target)}" target="_blank" rel="noopener">${esc(x.target)}</a>`:esc(x.target);
   const tags=(x.tags&&x.tags.length)?`<div class="tags">${esc(x.tags.join(" · "))}</div>`:"";
   const hasDetail=x.detail||x.evidence;
+  // Находка с CVE → кнопка подстановки готового msf-модуля в боевой кокпит.
+  const cve=(x.tags||[]).map(String).find(t=>/^CVE-\d{4}-\d{3,7}$/i.test(t));
+  const exbtn=cve?`<button class="ghost exbtn" data-cve="${esc(cve)}" data-tgt="${esc(x.target)}" style="padding:2px 9px;font-size:11px;margin-top:5px">⚔ Эксплойт ${esc(cve)}</button>`:"";
   const main=`<tr class="frow" data-i="${i}">
     <td style="border-left-color:${col}"><span class="sev" style="background:${col}">${SEVRU[x.severity]||x.severity}</span></td>
     <td><span class="tpill">${esc(TYPERU[x.type]||x.type)}</span></td>
-    <td>${hasDetail?'<span class="caret">▶</span> ':''}${esc(x.title)}${tags}</td>
+    <td>${hasDetail?'<span class="caret">▶</span> ':''}${esc(x.title)}${tags}${exbtn}</td>
     <td class="tgt">${tgt}</td>
     <td style="color:var(--mut)">${esc(x.tool||"")}</td></tr>`;
   let det="";
@@ -635,14 +640,41 @@ function renderFindings(){
   if(!f.length){el("ftbody").innerHTML=`<tr><td colspan="5" class="empty">${lastFindings.length?"ничего не подходит под фильтр":"пока нет находок — запусти скан"}</td></tr>`;return}
   el("ftbody").innerHTML=f.map(findingRow).join("");
   document.querySelectorAll("#ftbody tr.frow").forEach(r=>r.onclick=e=>{
-    if(e.target.closest("a"))return;
+    if(e.target.closest("a")||e.target.closest(".exbtn"))return;
     const d=r.nextElementSibling;
     if(d&&d.classList.contains("detail")){r.classList.toggle("open");d.classList.toggle("show");}
+  });
+  document.querySelectorAll("#ftbody .exbtn").forEach(b=>b.onclick=e=>{
+    e.stopPropagation();useExploit(b.dataset.cve,b.dataset.tgt);
   });
 }
 
 /* ---- эксплуатация ---- */
 function copyText(t){navigator.clipboard&&navigator.clipboard.writeText(t)}
+// Хост без порта/схемы — для поля RHOSTS боевого кокпита.
+function hostOnly(t){t=(t||"").replace(/^https?:\/\//,"").replace(/\/.*$/,"");const i=t.lastIndexOf(":");return i>0&&/^\d+$/.test(t.slice(i+1))?t.slice(0,i):t;}
+// Клик по кнопке «⚔ Эксплойт» на находке: тянем msf-модули по CVE и подставляем
+// в боевой кокпит (модуль+цель). Запуск — только по кнопке check/exploit вручную.
+async function useExploit(cve,target){
+  showTab("exploit");
+  const host=hostOnly(target);
+  el("exrhost").value=host;
+  const out=el("exout");out.style.display="block";
+  out.textContent="⏳ Ищу модуль Metasploit для "+cve+" ...";
+  let d;
+  try{const r=await fetch("/api/exploit/modules",{method:"POST",headers:H,body:JSON.stringify({cve})});
+    if(!r.ok){out.textContent="✖ "+await r.text();buildMsfCmd();return}
+    d=await r.json();
+  }catch(e){out.textContent="ошибка: "+e.message;return}
+  const mods=(d&&d.modules)||[];
+  if(!mods.length){
+    out.textContent="По "+cve+" готовый модуль Metasploit не найден.\nЦель подставлена — посмотри эксплойты через searchsploit ниже (поле «Продукт/версия/CVE»).";
+    el("ssq").value=cve;buildMsfCmd();return;
+  }
+  el("exmod").value=mods[0];buildMsfCmd();
+  out.textContent="Подставлен модуль:\n"+mods.map((m,i)=>(i?"  · "+m:"→ "+m+"  (в форме)")).join("\n")+
+    "\n\nДальше: «check» для неинтрузивного подтверждения, затем «Эксплуатировать (боевой)» — с подтверждением.";
+}
 async function loadExploitInfo(){
   let i;try{i=await(await fetch("/api/exploit/info",{headers:H})).json()}catch(e){return}
   el("ssbadge").innerHTML=i.hasSearchsploit?'':'<span style="color:#f3a6a6">searchsploit не установлен (apt install exploitdb)</span>';

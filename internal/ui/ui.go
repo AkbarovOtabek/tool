@@ -24,6 +24,7 @@ import (
 	"pentkit/internal/config"
 	"pentkit/internal/engine"
 	"pentkit/internal/event"
+	"pentkit/internal/exploit"
 	"pentkit/internal/netx"
 	"pentkit/internal/proxy"
 	"pentkit/internal/runner"
@@ -110,6 +111,8 @@ type scanRequest struct {
 		Nmap        bool `json:"nmap"`
 		Exploit     bool `json:"exploit"`
 		MsfCheck    bool `json:"msfcheck"`
+		Hydra       bool `json:"hydra"`
+		Crack       bool `json:"crack"`
 		Verify      bool `json:"verify"`
 	} `json:"options"`
 }
@@ -137,6 +140,7 @@ func Serve(addr string) error {
 	mux.HandleFunc("/api/exploit/searchsploit", s.auth(s.handleSearchsploit))
 	mux.HandleFunc("/api/exploit/check", s.auth(s.handleMsfCheck))
 	mux.HandleFunc("/api/exploit/run", s.auth(s.handleMsfRun))
+	mux.HandleFunc("/api/exploit/modules", s.auth(s.handleExploitModules))
 
 	// Прокси (Burp-режим): перехват, история, Intercept, Repeater.
 	mux.HandleFunc("/proxy", s.handleProxyPage)
@@ -195,7 +199,9 @@ func (s *Server) handleTools(w http.ResponseWriter, r *http.Request) {
 		"tlsx", "puredns", "massdns", "crlfuzz", "x8", "ghauri", "paramspider",
 		"notify", "interactsh-client",
 		// AD / внутрянка
-		"nxc", "kerbrute", "enum4linux-ng", "smbmap", "ldapsearch", "bloodhound-python"}
+		"nxc", "kerbrute", "enum4linux-ng", "smbmap", "ldapsearch", "bloodhound-python",
+		// пароли: онлайн-брут и офлайн-крекинг
+		"hydra", "john"}
 	res := map[string]bool{}
 	for _, t := range tools {
 		res[t] = rn.Has(t)
@@ -250,6 +256,7 @@ func (s *Server) handleScan(w http.ResponseWriter, r *http.Request) {
 		Nikto: req.Options.Nikto, Takeover: req.Options.Takeover,
 		Screenshots: req.Options.Screenshots, Nmap: req.Options.Nmap,
 		Exploit: req.Options.Exploit, MsfCheck: req.Options.MsfCheck,
+		Hydra: req.Options.Hydra, Crack: req.Options.Crack,
 		Verify: req.Options.Verify,
 	}
 	if req.Passive {
@@ -544,6 +551,31 @@ func (s *Server) handleSearchsploit(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, out)
+}
+
+// cveNumRe — CVE в виде номера (без учёта регистра префикса).
+var cveNumRe = regexp.MustCompile(`^(?i:CVE-)?(\d{4}-\d{3,7})$`)
+
+// handleExploitModules — по номеру CVE возвращает подходящие эксплойт-модули
+// Metasploit (через `search cve:`), чтобы веб-кокпит подставил готовый модуль в
+// форму по клику на находке. Ничего не запускает (ни check, ни exploit).
+func (s *Server) handleExploitModules(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		CVE string `json:"cve"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	m := cveNumRe.FindStringSubmatch(strings.TrimSpace(req.CVE))
+	if m == nil {
+		http.Error(w, "неверный CVE (ожидается CVE-2021-41773)", http.StatusBadRequest)
+		return
+	}
+	rn := runner.New(90*time.Second, false)
+	if !rn.Has("msfconsole") {
+		http.Error(w, "msfconsole не установлен (apt install metasploit-framework)", http.StatusBadRequest)
+		return
+	}
+	mods := exploit.ModulesForCVE(r.Context(), rn, m[1])
+	writeJSON(w, map[string]any{"cve": "CVE-" + m[1], "modules": mods})
 }
 
 // handleMsfCheck — НЕИНТРУЗИВНАЯ проверка модулем Metasploit (`check`, без `run`).

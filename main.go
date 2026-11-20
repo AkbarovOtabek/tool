@@ -65,7 +65,7 @@ func usage() {
   pentkit serve [-addr 127.0.0.1:8777]     Веб-интерфейс (всё в браузере)
   pentkit setup                            Доустановить недостающие тулы (apt/go/pipx/git)
   pentkit run    -c config.yaml [-v] [--no-verify]   Полный пайплайн (сам доустанавливает тулы)
-  pentkit recon  -c config.yaml            Только разведка + поиск origin за CF
+  pentkit recon  -c config.yaml            Разведка + nmap (порты, версии ПО, CVE) + эксплойты
   pentkit scan   -c config.yaml            Уязвимости: nuclei + takeover + TLS + nikto
   pentkit web    -c config.yaml            Краулинг + веб-тесты + секреты (ffuf/ferox/dalfox/gf)
   pentkit report -c config.yaml            Пересобрать отчёт из находок
@@ -78,6 +78,8 @@ func usage() {
   --install    доустановить недостающие тулы перед запуском (для run включено по умолчанию)
   --no-install для run: НЕ доустанавливать тулы
   --sqli       активные SQL-инъекции (sqlmap + nuclei -dast) — агрессивно, по согласованию
+  --hydra      онлайн-брут логинов ssh/ftp/telnet (hydra) — активно, по согласованию
+  --crack      офлайн-крекинг найденных хэшей по словарю (john) — локально, безопасно
   --passive    пассивный режим: без портскана/nikto/активных проверок (тихо для WAF)
 
 Скрытность (в config.yaml):
@@ -98,7 +100,10 @@ func engineOpts(stage string, noVerify bool) engine.Options {
 		o.Verify = !noVerify
 		return o
 	case "recon":
-		return engine.Options{Cloudflare: true, Fingerprint: true, OSINT: true}
+		// Разведка + сразу карта сервисов: nmap -sV (порты, продукт+версия),
+		// NSE vuln (CVE) и searchsploit (публичные эксплойты по продуктам/CVE).
+		return engine.Options{Cloudflare: true, Fingerprint: true, OSINT: true,
+			Nmap: true, Exploit: true}
 	case "scan":
 		return engine.Options{Vuln: true, Exposure: true, Bypass: true, Takeover: true, TLS: true, Nikto: true,
 			WordPress: true, Nmap: true, Exploit: true, MsfCheck: true, Verify: !noVerify}
@@ -125,6 +130,8 @@ func cmdPipeline(args []string, baseStage engine.Options, defaultInstall bool) {
 	verbose := fs.Bool("v", false, "подробный вывод")
 	noVerify := fs.Bool("no-verify", false, "не перепроверять срабатывания nuclei")
 	sqli := fs.Bool("sqli", false, "включить активные SQL-инъекции (sqlmap + nuclei -dast)")
+	hydra := fs.Bool("hydra", false, "онлайн-брут логинов ssh/ftp/telnet (hydra) — активно, по согласованию")
+	crack := fs.Bool("crack", false, "офлайн-крекинг найденных хэшей (john) — локально")
 	passive := fs.Bool("passive", false, "пассивный режим: без шумных активных проверок (для WAF/Firewall)")
 	install := fs.Bool("install", defaultInstall, "перед запуском доустановить недостающие тулы (apt/go/pipx; apt требует root/sudo)")
 	noInstall := fs.Bool("no-install", false, "не доустанавливать тулы (отменяет -install, в т.ч. дефолт для run)")
@@ -142,6 +149,12 @@ func cmdPipeline(args []string, baseStage engine.Options, defaultInstall bool) {
 	if *sqli {
 		opts.Web = true
 		opts.SQLi = true
+	}
+	if *hydra {
+		opts.Hydra = true
+	}
+	if *crack {
+		opts.Crack = true
 	}
 	if *passive {
 		// Пассив важнее любого агрессивного флага: оставляем только тихие модули.

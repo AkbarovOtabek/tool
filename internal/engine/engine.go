@@ -11,8 +11,10 @@ import (
 	"pentkit/internal/ad"
 	"pentkit/internal/analyze"
 	"pentkit/internal/apisec"
+	"pentkit/internal/brute"
 	"pentkit/internal/cloudflare"
 	"pentkit/internal/config"
+	"pentkit/internal/crack"
 	"pentkit/internal/crawl"
 	"pentkit/internal/event"
 	"pentkit/internal/exploit"
@@ -59,6 +61,8 @@ type Options struct {
 	Nmap        bool // nmap -sV + NSE vuln
 	Exploit     bool // searchsploit + Metasploit .rc (без автозапуска)
 	MsfCheck    bool // Metasploit check (неинтрузивное подтверждение)
+	Hydra       bool // онлайн-брут логинов ssh/ftp/telnet (hydra) — активно, по согласию
+	Crack       bool // офлайн-крекинг найденных хэшей (john) — локально, безопасно
 	Verify      bool // перепроверка срабатываний nuclei
 }
 
@@ -209,6 +213,11 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 		exploit.MsfCheck(ctx, rn, st, ev, tgt, cves)
 	}
 
+	if opts.Hydra {
+		ev.Stage("Онлайн-брут логинов (hydra)")
+		brute.Hydra(ctx, cfg, sc, rn, st, ev)
+	}
+
 	if opts.TLS {
 		ev.Stage("TLS (testssl)")
 		extra.TLS(ctx, rn, st, ev, hosts, maxTLSHosts)
@@ -247,6 +256,11 @@ func Run(ctx context.Context, cfg *config.Config, sc *scope.Scope, rn *runner.Ru
 	if opts.AD {
 		ev.Stage("Active Directory (внутренняя разведка)")
 		ad.Run(ctx, cfg, rn, st, ev)
+	}
+
+	if opts.Crack {
+		ev.Stage("Крекинг хэшей (john)")
+		crack.Run(ctx, cfg, rn, st, ev)
 	}
 
 	ev.Stage("Отчёт")

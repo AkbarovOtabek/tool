@@ -57,7 +57,7 @@ GOOS=linux GOARCH=amd64 go build -o pentkit .
 ```bash
 cp config.example.yaml config.yaml   # заполни scope, авторизацию, ключи
 ./pentkit run    -c config.yaml -v    # полный пайплайн
-./pentkit recon  -c config.yaml       # разведка + origin за CF
+./pentkit recon  -c config.yaml       # разведка + nmap (порты, версии ПО, CVE) + эксплойты
 ./pentkit scan   -c config.yaml       # nuclei + takeover + TLS + nikto + nmap + exploit + msf check
 ./pentkit web    -c config.yaml       # краулинг + веб-тесты + аудит заголовков
 ./pentkit web    -c config.yaml --sqli # + активные SQL-инъекции (по согласованию)
