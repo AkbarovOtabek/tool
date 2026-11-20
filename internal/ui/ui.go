@@ -130,6 +130,7 @@ func Serve(addr string) error {
 	mux.HandleFunc("/api/setup", s.auth(s.handleSetup))
 	mux.HandleFunc("/api/status", s.auth(s.handleStatus))
 	mux.HandleFunc("/api/findings", s.auth(s.handleFindings))
+	mux.HandleFunc("/api/finding/triage", s.auth(s.handleTriage))
 	mux.HandleFunc("/api/stop", s.auth(s.handleStop))
 	mux.HandleFunc("/api/report", s.auth(s.handleReport))
 	mux.HandleFunc("/api/export", s.auth(s.handleExport))
@@ -500,6 +501,36 @@ func appendEvidence(dir, action, module, target string) {
 	}
 	defer f.Close()
 	f.WriteString(line)
+}
+
+// triageStatus — допустимые статусы триажа находки.
+var triageStatus = map[string]bool{"": true, "confirmed": true, "false-positive": true, "in-progress": true}
+
+// handleTriage — пометка находки (подтверждено/ложное/в работе) + заметка.
+func (s *Server) handleTriage(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+		Note   string `json:"note"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+	if !triageStatus[req.Status] {
+		http.Error(w, "неверный статус (confirmed|false-positive|in-progress|пусто)", http.StatusBadRequest)
+		return
+	}
+	if len(req.Note) > 500 {
+		req.Note = req.Note[:500]
+	}
+	j := s.curJob()
+	if j == nil {
+		http.Error(w, "нет активной работы — сначала запусти скан", http.StatusBadRequest)
+		return
+	}
+	if !j.st.Triage(req.ID, req.Status, req.Note) {
+		http.Error(w, "находка не найдена", http.StatusNotFound)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
 }
 
 // handleExploitInfo — наличие тулов + содержимое готового metasploit.rc текущей работы.

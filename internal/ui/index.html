@@ -199,8 +199,10 @@ a{color:var(--accent)}
     <div class="brandsub">Оркестратор авторизованного пентеста — recon, уязвимости, веб-тесты, AD, отчёт.</div>
     <nav class="nav">
       <div class="navlbl">Разделы</div>
-      <button class="tab active" data-tab="scan"><span class="ni">🔎</span> Сканер<span class="nb" id="navCount"></span></button>
+      <button class="tab active" data-tab="dash"><span class="ni">📊</span> Дашборд</button>
+      <button class="tab" data-tab="scan"><span class="ni">🔎</span> Сканер<span class="nb" id="navCount"></span></button>
       <button class="tab" data-tab="exploit"><span class="ni">🧨</span> Эксплуатация</button>
+      <button class="tab" data-tab="loot"><span class="ni">💰</span> Добыча<span class="nb" id="lootCount"></span></button>
       <button class="tab" data-tab="proxy"><span class="ni">🔀</span> Прокси</button>
     </nav>
     <div class="side-foot">
@@ -209,9 +211,35 @@ a{color:var(--accent)}
     </div>
   </aside>
   <main class="main">
+  <style>
+  .dstats,.dstats2{display:flex;gap:10px;flex-wrap:wrap}
+  .dcard{flex:1;min-width:92px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;text-align:center}
+  .dnum{font-size:26px;font-weight:800;line-height:1}
+  .dlbl{font-size:11px;color:var(--mut);margin-top:5px;text-transform:uppercase;letter-spacing:.4px}
+  .hcard{padding:0;margin-bottom:8px;overflow:hidden}
+  .hrow{display:flex;align-items:center;gap:9px;padding:11px 14px;cursor:pointer}
+  .hdot{width:9px;height:9px;border-radius:50%;flex:none}
+  .hmeta{font-size:12px;color:var(--mut)}
+  .hbody{display:none;padding:0 14px 10px;border-top:1px solid var(--line)}
+  .hcard.open .hbody{display:block}
+  .hitem{padding:6px 0;font-size:13px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+  .hitem:last-child{border-bottom:none}
+  .exbtn2{padding:1px 8px;font-size:11px;margin-left:auto}
+  .tstatpill{font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;margin-left:6px}
+  .triage{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;padding-top:8px;border-top:1px dashed var(--line)}
+  .triage select,.triage input{padding:4px 8px;font-size:12px}
+  .triage input{flex:1;min-width:140px}
+  </style>
+
+  <!-- ===== ВКЛАДКА: ДАШБОРД ===== -->
+  <div class="page active" id="page-dash">
+    <div class="phead">📊 Дашборд</div>
+    <div class="psub">Обзор текущей работы: сводка находок, поверхность атаки по хостам и последняя добыча. Запусти скан на вкладке «Сканер».</div>
+    <div id="dashbody"></div>
+  </div>
 
   <!-- ===== ВКЛАДКА: СКАНЕР ===== -->
-  <div class="page active" id="page-scan">
+  <div class="page" id="page-scan">
     <div class="phead">🔎 Сканер</div>
     <div class="psub">Выбери готовый режим в один клик, заполни scope и авторизацию — pentkit прогонит recon, уязвимости, веб-тесты, утечки, AD и соберёт отчёт.</div>
     <div class="warn">⚠️ Запускай только против систем, на тест которых у тебя есть письменное разрешение. Поле «Авторизация» обязательно и попадает в отчёт.</div>
@@ -356,6 +384,13 @@ a{color:var(--accent)}
     </div>
   </div>
 
+  <!-- ===== ВКЛАДКА: ДОБЫЧА ===== -->
+  <div class="page" id="page-loot">
+    <div class="phead">💰 Добыча</div>
+    <div class="psub">Собранные учётные данные, вскрытые хэши, токены и подтверждённые уязвимости с готовыми эксплойтами — всё в одном месте.</div>
+    <div id="lootbody"></div>
+  </div>
+
   <!-- ===== ВКЛАДКА: ПРОКСИ ===== -->
   <div class="page" id="page-proxy">
     <div class="phead">🔀 Прокси</div>
@@ -444,6 +479,8 @@ function showTab(name){
   document.querySelectorAll(".page").forEach(p=>p.classList.toggle("active",p.id==="page-"+name));
   if(name==="proxy" && !el("pxframe").src) el("pxframe").src="/proxy?t="+TOKEN;
   if(name==="exploit") loadExploitInfo();
+  if(name==="dash") renderDash();
+  if(name==="loot") renderLoot();
 }
 
 /* ---- пресеты ---- */
@@ -596,16 +633,23 @@ function findingRow(x,i){
   const main=`<tr class="frow" data-i="${i}">
     <td style="border-left-color:${col}"><span class="sev" style="background:${col}">${SEVRU[x.severity]||x.severity}</span></td>
     <td><span class="tpill">${esc(TYPERU[x.type]||x.type)}</span></td>
-    <td>${hasDetail?'<span class="caret">▶</span> ':''}${esc(x.title)}${tags}${exbtn}</td>
+    <td><span class="caret">▶</span> ${esc(x.title)}${statusPill(x.status)}${tags}${exbtn}</td>
     <td class="tgt">${tgt}</td>
     <td style="color:var(--mut)">${esc(x.tool||"")}</td></tr>`;
-  let det="";
-  if(hasDetail){
-    det=`<tr class="detail" data-d="${i}"><td colspan="5"><div class="inner">`+
-      (x.detail?`<div class="kv"><div class="k">Детали</div><div class="v">${esc(x.detail)}</div></div>`:"")+
-      (x.evidence?`<div class="kv"><div class="k">Доказательство</div><div class="v mono">${esc(x.evidence)}</div></div>`:"")+
-      `</div></td></tr>`;
-  }
+  const triage=`<div class="triage">
+    <select class="tstat" data-id="${x.id}" onchange="saveTriage('${x.id}')">
+      <option value=""${!x.status?" selected":""}>— статус —</option>
+      <option value="confirmed"${x.status==="confirmed"?" selected":""}>✓ подтверждено</option>
+      <option value="in-progress"${x.status==="in-progress"?" selected":""}>⏳ в работе</option>
+      <option value="false-positive"${x.status==="false-positive"?" selected":""}>✗ ложное</option>
+    </select>
+    <input class="tnote" data-id="${x.id}" placeholder="заметка к находке…" value="${esc(x.note||'')}">
+    <button class="ghost" style="padding:4px 10px" onclick="saveTriage('${x.id}')">💾 Сохранить</button>
+    <span class="tmsg" data-id="${x.id}" style="color:var(--ok);font-size:12px"></span></div>`;
+  const det=`<tr class="detail" data-d="${i}"><td colspan="5"><div class="inner">`+
+    (x.detail?`<div class="kv"><div class="k">Детали</div><div class="v">${esc(x.detail)}</div></div>`:"")+
+    (x.evidence?`<div class="kv"><div class="k">Доказательство</div><div class="v mono">${esc(x.evidence)}</div></div>`:"")+
+    triage+`</div></td></tr>`;
   return main+det;
 }
 // статус живости поддомена из тегов: live / noresp / dead / "" (не поддомен)
@@ -647,6 +691,61 @@ function renderFindings(){
   document.querySelectorAll("#ftbody .exbtn").forEach(b=>b.onclick=e=>{
     e.stopPropagation();useExploit(b.dataset.cve,b.dataset.tgt);
   });
+  renderDash();renderLoot();
+}
+
+/* ---- дашборд / карточки целей / добыча / триаж ---- */
+function cveOf(x){return (x.tags||[]).map(String).find(t=>/^CVE-\d{4}-\d{3,7}$/i.test(t))||""}
+function hostOf(t){return hostOnly(t)}
+function maxSev(list){const o=["info","low","medium","high","critical"];let m=0;list.forEach(x=>{const i=o.indexOf(x.severity);if(i>m)m=i});return o[m]}
+const STATUS={confirmed:["✓ подтверждено","var(--ok)"],"false-positive":["✗ ложное","var(--mut)"],"in-progress":["⏳ в работе","var(--sev-med)"]};
+function statusPill(s){if(!s||!STATUS[s])return"";const[t,c]=STATUS[s];return `<span class="tstatpill" style="background:${c};color:#fff">${t}</span>`}
+
+function renderDash(){
+  const f=lastFindings,b=el("dashbody");if(!b)return;
+  if(!f.length){b.innerHTML=`<div class="card"><h2>Пока нет данных</h2><div style="color:var(--mut);margin-bottom:12px">Запусти скан на вкладке «Сканер» — здесь появятся сводка по важности, поверхность атаки и хосты.</div><button class="act" onclick="showTab('scan')">▶ Перейти к сканеру</button></div>`;return}
+  const sev=[["critical","Крит"],["high","Высок"],["medium","Средн"],["low","Низк"],["info","Инфо"]];
+  const stat=sev.map(([k,l])=>`<div class="dcard"><div class="dnum" style="color:${SEV[k]}">${f.filter(x=>x.severity===k).length}</div><div class="dlbl">${l}</div></div>`).join("");
+  const hosts={};let subs=0,ports=0,vulns=0;const urls=new Set();
+  f.forEach(x=>{if(x.type==="subdomain")subs++;if(x.type==="port")ports++;if(x.type==="vuln")vulns++;if(/^https?:/.test(x.target))urls.add(x.target);const h=hostOf(x.target);if(h&&/^[a-z0-9.:\-]+$/i.test(h)){(hosts[h]=hosts[h]||[]).push(x)}});
+  const surf=[["Хостов",Object.keys(hosts).length],["Поддоменов",subs],["Портов",ports],["URL",urls.size],["Уязвимостей",vulns]].map(([l,n])=>`<div class="dcard"><div class="dnum">${n}</div><div class="dlbl">${l}</div></div>`).join("");
+  const hostCards=Object.entries(hosts).sort((a,c)=>c[1].length-a[1].length).slice(0,12).map(([h,list])=>{
+    const cves=[...new Set(list.map(cveOf).filter(Boolean))],ms=maxSev(list);
+    const items=list.slice(0,50).map(x=>{const c=cveOf(x);return `<div class="hitem"><span class="sev" style="background:${SEV[x.severity]}">${SEVRU[x.severity]||x.severity}</span> ${esc(x.title)}${c?`<button class="ghost exbtn2" onclick="useExploit('${c}','${esc(h)}')">⚔ ${esc(c)}</button>`:""}</div>`}).join("");
+    return `<div class="card hcard"><div class="hrow" onclick="this.closest('.hcard').classList.toggle('open')"><span class="hdot" style="background:${SEV[ms]}"></span><b>${esc(h)}</b><span class="spacer"></span><span class="hmeta">${list.length} находок · ${cves.length} CVE</span></div><div class="hbody">${items}</div></div>`;
+  }).join("");
+  const recent=f.filter(x=>x.severity==="critical"||x.severity==="high").slice(0,10).map(x=>`<div class="hitem"><span class="sev" style="background:${SEV[x.severity]}">${SEVRU[x.severity]}</span> ${esc(x.title)} <span style="color:var(--mut);margin-left:auto">${esc(hostOf(x.target))}</span></div>`).join("")||'<div style="color:var(--mut)">крит/high находок нет</div>';
+  b.innerHTML=`<div class="dstats">${stat}</div>
+    <div class="card" style="margin-top:14px"><h2>Поверхность атаки</h2><div class="dstats2">${surf}</div></div>
+    <div class="grid" style="margin-top:14px">
+      <div class="card"><h2>Хосты (клик — развернуть)</h2>${hostCards||'<div style="color:var(--mut)">нет хостов</div>'}</div>
+      <div class="card"><h2>Важные находки</h2>${recent}</div></div>`;
+}
+
+const LOOT=[["weak-credentials","🔑 Учётные данные"],["cracked-hash","🔓 Вскрытые хэши"],["secret","🗝 Секреты/токены"],["verified","✅ Подтверждённые (msf)"],["exploit-available","💥 Есть эксплойт"]];
+function hasTag(x,t){return (x.tags||[]).map(String).includes(t)}
+function renderLoot(){
+  const f=lastFindings,b=el("lootbody");if(!b)return;
+  let total=0;
+  const blocks=LOOT.map(([tag,title])=>{
+    const items=f.filter(x=>hasTag(x,tag));if(!items.length)return"";total+=items.length;
+    const rows=items.map(x=>{const c=cveOf(x);return `<div class="hitem"><span class="sev" style="background:${SEV[x.severity]}">${SEVRU[x.severity]||x.severity}</span> <b>${esc(x.title)}</b> <span style="color:var(--mut)">${esc(hostOf(x.target))}</span>${x.evidence?`<div style="width:100%;color:var(--mut);font-family:monospace;font-size:12px">${esc(x.evidence)}</div>`:""}${c?`<button class="ghost exbtn2" onclick="useExploit('${c}','${esc(hostOf(x.target))}')">⚔</button>`:""}</div>`}).join("");
+    return `<div class="card" style="margin-bottom:12px"><h2>${title} <span style="color:var(--mut);font-weight:400">(${items.length})</span></h2>${rows}</div>`;
+  }).join("");
+  el("lootCount").textContent=total||"";
+  b.innerHTML=total?blocks:`<div class="card"><div style="color:var(--mut)">Добычи пока нет. Здесь появятся учётные данные (hydra), вскрытые хэши (john), секреты, подтверждённые уязвимости и эксплойты по мере сканирования.</div></div>`;
+}
+
+function saveTriage(id){
+  const s=document.querySelector('.tstat[data-id="'+id+'"]'),n=document.querySelector('.tnote[data-id="'+id+'"]');
+  doTriage(id,s?s.value:"",n?n.value:"");
+}
+async function doTriage(id,status,note){
+  try{const r=await fetch("/api/finding/triage",{method:"POST",headers:H,body:JSON.stringify({id,status,note:note||""})});
+    if(!r.ok)return;
+    const x=lastFindings.find(y=>y.id===id);if(x){x.status=status;x.note=note||""}
+    const m=document.querySelector('.tmsg[data-id="'+id+'"]');if(m){m.textContent="✓ сохранено";setTimeout(()=>{m.textContent=""},1500)}
+  }catch(e){}
 }
 
 /* ---- эксплуатация ---- */

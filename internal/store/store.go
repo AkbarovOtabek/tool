@@ -71,6 +71,8 @@ type Finding struct {
 	Evidence  string    `json:"evidence,omitempty"` // доказательство (вывод тула, запрос/ответ)
 	Tool      string    `json:"tool,omitempty"`     // чем найдено
 	Tags      []string  `json:"tags,omitempty"`
+	Status    string    `json:"status,omitempty"` // триаж: ""|confirmed|false-positive|in-progress
+	Note      string    `json:"note,omitempty"`   // заметка пентестера к находке
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -165,6 +167,29 @@ func (s *Store) Add(f Finding) bool {
 			s.w.Flush()
 			s.unflush = 0
 		}
+	}
+	return true
+}
+
+// Triage обновляет статус/заметку находки по id (триаж: подтверждено/ложное/в
+// работе). Обновлённая запись дописывается в файл — при перезагрузке последняя
+// версия по id побеждает, так что статус сохраняется между запусками.
+func (s *Store) Triage(id, status, note string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	f, ok := s.byID[id]
+	if !ok {
+		return false
+	}
+	f.Status = status
+	f.Note = note
+	s.byID[id] = f
+	s.dirty = true
+	if b, err := json.Marshal(f); err == nil {
+		s.w.Write(b)
+		s.w.WriteByte('\n')
+		s.w.Flush()
+		s.unflush = 0
 	}
 	return true
 }
