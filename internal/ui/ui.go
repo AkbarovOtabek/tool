@@ -128,6 +128,7 @@ func Serve(addr string) error {
 	mux.HandleFunc("/api/tools", s.auth(s.handleTools))
 	mux.HandleFunc("/api/scan", s.auth(s.handleScan))
 	mux.HandleFunc("/api/setup", s.auth(s.handleSetup))
+	mux.HandleFunc("/api/setup/update", s.auth(s.handleUpdate))
 	mux.HandleFunc("/api/status", s.auth(s.handleStatus))
 	mux.HandleFunc("/api/findings", s.auth(s.handleFindings))
 	mux.HandleFunc("/api/finding/triage", s.auth(s.handleTriage))
@@ -374,6 +375,58 @@ func (s *Server) handleSetup(w http.ResponseWriter, r *http.Request) {
 		}()
 		rn := runner.New(15*time.Minute, false)
 		setup.Install(ctx, rn, sink)
+		s.mu.Lock()
+		j.done = true
+		s.mu.Unlock()
+	}()
+
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// handleUpdate обновляет уже установленные тулы до свежих версий (стриминг в лог).
+func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	if s.job != nil && !s.job.done {
+		s.mu.Unlock()
+		http.Error(w, "процесс уже идёт", http.StatusConflict)
+		return
+	}
+	s.mu.Unlock()
+
+	dir, err := os.MkdirTemp("", "pentkit-update-")
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	st, err := store.Open(dir)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	sink := event.NewBuffered()
+	ctx, cancel := context.WithCancel(context.Background())
+	cfg := &config.Config{}
+	cfg.Engagement.Name = "update"
+	j := &job{sink: sink, st: st, cfg: cfg, cancel: cancel}
+	s.mu.Lock()
+	s.job = j
+	s.mu.Unlock()
+
+	go func() {
+		sink.Start()
+		defer func() {
+			if rec := recover(); rec != nil {
+				s.mu.Lock()
+				j.err = fmt.Sprintf("внутренняя ошибка: %v", rec)
+				j.done = true
+				s.mu.Unlock()
+			}
+			sink.Finish()
+			st.Close()
+			os.RemoveAll(dir)
+		}()
+		rn := runner.New(20*time.Minute, false)
+		setup.Update(ctx, rn, sink)
 		s.mu.Lock()
 		j.done = true
 		s.mu.Unlock()

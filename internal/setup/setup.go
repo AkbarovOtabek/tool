@@ -324,6 +324,79 @@ func Install(ctx context.Context, rn *runner.Runner, ev event.Sink) Summary {
 	return sum
 }
 
+// Update обновляет УЖЕ установленные тулы до свежих версий (не ставит новые):
+//   - apt-тулы: apt-get install --only-upgrade (только установленные пакеты);
+//   - go-тулы:  go install ...@latest (тянет свежую версию);
+//   - pipx:     pipx upgrade-all;
+//   - nuclei:   обновление движка и шаблонов.
+// Возвращает сводку (Installed = обновлённые).
+func Update(ctx context.Context, rn *runner.Runner, ev event.Sink) Summary {
+	ev.Stage("Обновление тулов")
+	ensurePath()
+	var sum Summary
+	sudo := aptSudoPrefix()
+
+	// apt-тулы: обновляем только реально установленные пакеты.
+	if has("apt-get") {
+		var pkgs []string
+		for _, t := range registry {
+			for _, s := range t.steps {
+				if s.kind == kindApt && rn.Has(t.bin) && aptInstalled(s.arg) {
+					pkgs = append(pkgs, s.arg)
+				}
+			}
+		}
+		if len(pkgs) == 0 {
+			ev.Logln("  apt: установленных apt-тулов не найдено — пропускаю")
+		} else if sudo == nil && os.Geteuid() != 0 {
+			ev.Logf("  ! нет root/sudo — %d apt-тулов не обновить (запусти pentkit от root)\n", len(pkgs))
+		} else {
+			ev.Logf("  apt: обновляю %d установленных пакетов...\n", len(pkgs))
+			env := append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
+			stream(ctx, ev, env, append(sudo, "apt-get", "update", "-qq")...)
+			args := append(append(sudo, "apt-get", "install", "-y", "--only-upgrade"), pkgs...)
+			if err := stream(ctx, ev, env, args...); err != nil {
+				ev.Logf("  ! apt upgrade частично не сработал: %v\n", err)
+			}
+			sum.Installed = append(sum.Installed, pkgs...)
+		}
+	}
+
+	// go-тулы: переустанавливаем @latest только установленные.
+	if has("go") {
+		for _, t := range registry {
+			for _, s := range t.steps {
+				if s.kind == kindGo && rn.Has(t.bin) {
+					ev.Logf("  go install (обновление) %s ...\n", t.bin)
+					if err := stream(ctx, ev, goEnv(), "go", "install", s.arg); err != nil {
+						ev.Logf("  ! %s: %v\n", t.bin, err)
+					} else {
+						sum.Installed = append(sum.Installed, t.bin)
+					}
+					break
+				}
+			}
+		}
+	}
+
+	// pipx-тулы: обновляем все разом.
+	if has("pipx") {
+		ev.Logln("  pipx: обновляю все установленные пакеты...")
+		_ = stream(ctx, ev, os.Environ(), "pipx", "upgrade-all")
+	}
+
+	// nuclei: движок + шаблоны.
+	if has("nuclei") {
+		ev.Logln("  nuclei: обновляю движок и шаблоны...")
+		_ = stream(ctx, ev, os.Environ(), "nuclei", "-update", "-silent")
+		_ = stream(ctx, ev, os.Environ(), "nuclei", "-update-templates", "-silent")
+	}
+
+	rn.Refresh()
+	ev.Logf("  обновление завершено (обновлено ~%d тулов)\n", len(sum.Installed))
+	return sum
+}
+
 // --- утилиты ---
 
 func has(bin string) bool { _, err := exec.LookPath(bin); return err == nil }
