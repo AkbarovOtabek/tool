@@ -214,25 +214,35 @@ func Install(ctx context.Context, rn *runner.Runner, ev event.Sink) Summary {
 	}
 	ev.Logf("  недостающих тулов: %d\n", len(missing))
 
-	// --- Фаза apt: prereq + пакеты тулов одним вызовом ---
+	// --- Фаза apt: ставим ТОЛЬКО реально отсутствующие пакеты ---
+	// Проверяем каждый пакет через dpkg и пропускаем уже установленные — чтобы
+	// повторный клик «Установить тулы» не перекачивал build-зависимости и seclists.
 	if haveApt {
 		pkgs := map[string]bool{}
-		for _, p := range prereqApt {
-			pkgs[p] = true
-		}
+		// apt-пакеты недостающих тулов (сам бинарник не найден в PATH).
 		for _, t := range missing {
 			for _, s := range t.steps {
 				if s.kind == kindApt {
-					pkgs[s.arg] = true
+					if !aptInstalled(s.arg) {
+						pkgs[s.arg] = true
+					}
 					break
 				}
 			}
 		}
-		if sudo == nil && os.Geteuid() != 0 {
-			ev.Logln("  ! нет root/sudo — apt-пакеты пропущены (go-тулы поставятся без root)")
+		// Build-зависимости — только те, которых ещё нет.
+		for _, p := range prereqApt {
+			if !aptInstalled(p) {
+				pkgs[p] = true
+			}
+		}
+		if len(pkgs) == 0 {
+			ev.Logln("  apt: все нужные системные пакеты уже установлены — пропускаю")
+		} else if sudo == nil && os.Geteuid() != 0 {
+			ev.Logf("  ! нет root/sudo — %d apt-пакетов пропущены (запусти pentkit от root; go-тулы поставятся без root)\n", len(pkgs))
 		} else {
 			list := keys(pkgs)
-			ev.Logf("  apt: обновляю индекс и ставлю %d пакетов (это может занять время)...\n", len(list))
+			ev.Logf("  apt: недостающих системных пакетов %d — обновляю индекс и ставлю...\n", len(list))
 			env := append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
 			stream(ctx, ev, env, append(sudo, "apt-get", "update", "-qq")...)
 			args := append(append(sudo, "apt-get", "install", "-y", "--no-install-recommends"), list...)
@@ -284,9 +294,17 @@ func Install(ctx context.Context, rn *runner.Runner, ev event.Sink) Summary {
 	}
 	rn.Refresh()
 
-	// --- Пост-установка: шаблоны nuclei ---
-	if has("nuclei") {
-		ev.Logln("  nuclei: обновляю шаблоны...")
+	// --- Пост-установка: шаблоны nuclei — только если nuclei поставили сейчас,
+	// иначе повторный клик зря перекачивал бы весь набор шаблонов. ---
+	nucleiWasMissing := false
+	for _, t := range missing {
+		if t.bin == "nuclei" {
+			nucleiWasMissing = true
+			break
+		}
+	}
+	if nucleiWasMissing && has("nuclei") {
+		ev.Logln("  nuclei: первая установка — качаю шаблоны...")
 		_ = stream(ctx, ev, os.Environ(), "nuclei", "-update-templates", "-silent")
 	}
 
@@ -309,6 +327,13 @@ func Install(ctx context.Context, rn *runner.Runner, ev event.Sink) Summary {
 // --- утилиты ---
 
 func has(bin string) bool { _, err := exec.LookPath(bin); return err == nil }
+
+// aptInstalled сообщает, установлен ли уже apt-пакет — чтобы не переустанавливать
+// уже имеющиеся build-зависимости при каждом нажатии «Установить тулы».
+func aptInstalled(pkg string) bool {
+	out, err := exec.Command("dpkg-query", "-W", "-f=${Status}", pkg).Output()
+	return err == nil && strings.Contains(string(out), "install ok installed")
+}
 
 // aptSudoPrefix возвращает префикс для apt: nil если root, {"sudo","-n"} если
 // есть sudo без root, nil если sudo нет (тогда apt-фаза пропускается).
