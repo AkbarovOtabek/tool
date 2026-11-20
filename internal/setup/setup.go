@@ -420,8 +420,15 @@ func aptSudoPrefix() []string {
 	return nil
 }
 
-// ensurePath добавляет GOPATH/bin, ~/go/bin и ~/.local/bin в PATH процесса,
-// чтобы только что установленные тулы находились через LookPath.
+// EnsurePath дополняет PATH процесса стандартными каталогами тулов. Вызывается
+// один раз на старте (main), чтобы и скан, и установщик, и веб-UI находили тулы
+// из /usr/local/bin и ~/.cargo/bin даже под урезанным sudo-PATH.
+func EnsurePath() { ensurePath() }
+
+// ensurePath добавляет в PATH процесса каталоги, где оказываются установленные
+// тулы: GOPATH/bin, ~/go/bin, ~/.local/bin, cargo-bin и /usr/local/bin. Последние
+// важны под sudo: secure_path часто выкидывает /usr/local/bin и ~/.cargo/bin, и
+// тогда cargo-тулы (x8/rustscan) и ручные установки «не находятся», хотя стоят.
 func ensurePath() {
 	var add []string
 	if out, err := exec.Command("go", "env", "GOPATH").Output(); err == nil {
@@ -430,8 +437,11 @@ func ensurePath() {
 		}
 	}
 	if home, err := os.UserHomeDir(); err == nil {
-		add = append(add, filepath.Join(home, "go", "bin"), filepath.Join(home, ".local", "bin"))
+		add = append(add, filepath.Join(home, "go", "bin"),
+			filepath.Join(home, ".local", "bin"), filepath.Join(home, ".cargo", "bin"))
 	}
+	// Стандартные системные каталоги, которых часто нет в урезанном PATH под sudo.
+	add = append(add, "/root/.cargo/bin", "/usr/local/bin", "/usr/local/sbin")
 	path := os.Getenv("PATH")
 	for _, d := range add {
 		if d != "" && !strings.Contains(path+string(os.PathListSeparator), d+string(os.PathListSeparator)) {

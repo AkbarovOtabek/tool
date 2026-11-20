@@ -31,6 +31,10 @@ import (
 const version = "0.5.0"
 
 func main() {
+	// Дополняем PATH стандартными каталогами тулов (/usr/local/bin, ~/.cargo/bin…),
+	// которые sudo-secure_path часто выкидывает — иначе установленные x8/rustscan
+	// и прочее «не находятся» и при скане, и в установщике.
+	setup.EnsurePath()
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(1)
